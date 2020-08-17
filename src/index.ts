@@ -62,18 +62,25 @@ export class TemplateCompletion implements CompletionItemProvider {
   private _disposable: Disposable;
   parser: Parser;
   tree!: Parser.Tree;
-  templateList: TemplateMap[];
+  templateList!: TemplateMap[];
   constructor() {
     const subscriptions: Disposable[] = [];
     this.parser = new Parser();
     this.parser.setLanguage(Typescript);
     this._disposable = Disposable.from(...subscriptions);
+    this.initTemplateList();
+    workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration("tjs-postfix.templateMapList")) {
+        this.initTemplateList();
+      }
+    });
+  }
+  initTemplateList() {
     this.templateList = workspace.getConfiguration("tjs-postfix")?.get("templateMapList") ?? [];
     this.templateList = this.templateList.filter(item => {
       return item.functionName && item.snippetKey;
     });
   }
-
   dispose(): void {
     this._disposable.dispose();
   }
@@ -129,5 +136,4 @@ export class TemplateCompletion implements CompletionItemProvider {
       return item;
     });
   }
-
 }
