@@ -12,6 +12,7 @@ import {
   Disposable,
   TextEdit,
   Range,
+  workspace,
 } from "vscode";
 
 import * as path from "path";
@@ -39,6 +40,7 @@ export class VueTemplateCompletion {
         [
           { language: "typescript", scheme: "file" },
           { language: "javascript", scheme: "file" },
+          { language: "vue", scheme: "file" },
         ],
         this._completion,
         "."
@@ -52,30 +54,24 @@ type CompletionMap = {
   prop: CompletionItem[];
   slot: CompletionItem[];
 };
-
-type ComponentCompletionMap = {
-  [componentName: string]: CompletionMap;
+type TemplateMap = {
+  snippetKey: string;
+  functionName: string;
 };
-
-enum MyCompletionPositionKind {
-  StartTag,
-  DirectiveAttribute,
-  Attribute,
-}
-
-const directiveAttributeRegExp = /[\w_@\-\:]+/;
-
-// HACK: 目前的tagName 转化以及对比做的不好，需要优化
-
 export class TemplateCompletion implements CompletionItemProvider {
   private _disposable: Disposable;
   parser: Parser;
   tree!: Parser.Tree;
+  templateList: TemplateMap[];
   constructor() {
     const subscriptions: Disposable[] = [];
     this.parser = new Parser();
     this.parser.setLanguage(Typescript);
     this._disposable = Disposable.from(...subscriptions);
+    this.templateList = workspace.getConfiguration("tjs-postfix")?.get("templateMapList") ?? [];
+    this.templateList = this.templateList.filter(item => {
+      return item.functionName && item.snippetKey;
+    });
   }
 
   dispose(): void {
@@ -97,19 +93,15 @@ export class TemplateCompletion implements CompletionItemProvider {
     if (!range) {
       return [];
     }
-    
+
     const beforeDot = range.start;
     const doc = document.getText();
-    console.time("start");
     this.tree = this.parser.parse(doc);
-    // tree.rootNode.descendantForPosition(position);
-    // debugger;
+
     let curNode = this.tree.rootNode.namedDescendantForPosition({
       column: beforeDot.character,
       row: beforeDot.line,
     });
-    console.timeEnd("start");
-    // curNode.namedDescendantForPosition(position);
     let endIndex = curNode.endIndex;
     while (true) {
       if (curNode.parent && curNode.parent.endIndex === endIndex && curNode.type !== "ERROR") {
@@ -118,18 +110,24 @@ export class TemplateCompletion implements CompletionItemProvider {
         break;
       }
     }
-    console.log(curNode.type);
-    const item = new CompletionItem("log");
-    item.insertText = "";
-    
-    const edit = new TextEdit(
-      new Range(curNode.startPosition.row, curNode.startPosition.column, range.end.line, range.end.character),
-      `console.log(${curNode.text})`
-    );
-    console.log(curNode.text);
-    item.additionalTextEdits = [edit];
-    return [item];
+    // console.log(curNode.type);
+    return this.templateList.map(template => {
+      const item = new CompletionItem(template.snippetKey);
+      item.kind = CompletionItemKind.Snippet;
+      item.insertText = "";
+      item.keepWhitespace = true;
+      const replaceString = `${template.functionName}(${curNode.text})`;
+      item.documentation = replaceString;
+      const replaceRange = new Range(
+        curNode.startPosition.row,
+        curNode.startPosition.column,
+        range.end.line,
+        range.end.character
+      );
+      // console.log(curNode.text);
+      item.additionalTextEdits = [TextEdit.replace(replaceRange, replaceString)];
+      return item;
+    });
   }
 
-  // [39, 43].includes(curNode.parent.typeId)
 }
