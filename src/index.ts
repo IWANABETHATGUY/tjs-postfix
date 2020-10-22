@@ -31,7 +31,6 @@ export class VueTemplateCompletion {
     this.initCompletion();
   }
 
-  private resetComponentMetaData(): void {}
 
   private initCompletion(): void {
     this._completion = new TemplateCompletion();
@@ -49,11 +48,6 @@ export class VueTemplateCompletion {
   }
 }
 
-type CompletionMap = {
-  event: CompletionItem[];
-  prop: CompletionItem[];
-  slot: CompletionItem[];
-};
 type TemplateMap = {
   snippetKey: string;
   functionName: string;
@@ -103,8 +97,9 @@ export class TemplateCompletion implements CompletionItemProvider {
 
     const beforeDot = range.start;
     const doc = document.getText();
+    console.time("parse tree");
     this.tree = this.parser.parse(doc);
-
+    console.timeEnd("parse tree");
     let curNode = this.tree.rootNode.namedDescendantForPosition({
       column: beforeDot.character,
       row: beforeDot.line,

@@ -35,7 +35,7 @@
 		"watch": "tsc -watch -p ./",
 		"pretest": "yarn run compile && yarn run lint",
 		"test": "node ./out/test/runTest.js",
-		"rebuild": "electron-rebuild -v 7.3.2 tree-sitter"
+		"rebuild": "electron-rebuild -v 9.2.1 tree-sitter"
 	},
 	"devDependencies": {
 		"@types/glob": "^7.1.3",
