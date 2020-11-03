@@ -1,7 +1,7 @@
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
-use tower_lsp::{Client, LanguageServer, LspService, Server };
+use tower_lsp::{Client, LanguageServer, LspService, Server};
 use treesitter_ts::tree_sitter_typescript;
 #[derive(Debug)]
 struct Backend {
@@ -15,7 +15,7 @@ impl LanguageServer for Backend {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Full,
+                    TextDocumentSyncKind::Incremental,
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
@@ -82,15 +82,13 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        let mut text = params.text_document;
-        
+        let text = params.text_document;
         self.client
             .log_message(MessageType::Info, "file opened!")
             .await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        // params.text_document
         self.client
             .log_message(MessageType::Info, "file changed!")
             .await;
@@ -108,8 +106,7 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        params.text_document_position.text_document;
+    async fn completion(&self, _: CompletionParams) -> Result<Option<CompletionResponse>> {
         Ok(Some(CompletionResponse::Array(vec![
             CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
             CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
