@@ -336,6 +336,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tower-lsp",
+ "treesitter-ts",
 ]
 
 [[package]]
