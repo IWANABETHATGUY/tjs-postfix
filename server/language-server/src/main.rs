@@ -1,11 +1,15 @@
+use std::sync::{Arc, Mutex};
+
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use treesitter_ts::tree_sitter_typescript;
-#[derive(Debug)]
+// #[derive(Debug)]
 struct Backend {
     client: Client,
+    document: Option<TextDocumentItem>,
+    parser: Arc<Mutex<tree_sitter::Parser>>,
 }
 
 #[tower_lsp::async_trait]
@@ -15,7 +19,7 @@ impl LanguageServer for Backend {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Incremental,
+                    TextDocumentSyncKind::Full,
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
@@ -83,9 +87,7 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let text = params.text_document;
-        self.client
-            .log_message(MessageType::Info, "file opened!")
-            .await;
+        self.client.log_message(MessageType::Info, text.uri).await;
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -106,14 +108,18 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn completion(&self, _: CompletionParams) -> Result<Option<CompletionResponse>> {
-        Ok(Some(CompletionResponse::Array(vec![
-            CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
-            CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
-        ])))
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        if let Some(kind) = params.context.and_then(|context| context.trigger_character) {
+            if kind == "." {
+
+            }
+        }
+        Ok(None)
+        // Ok(Some(CompletionResponse::Array(vec![
+        //     CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
+        //     CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
+        // ])))
     }
-    
-    
 }
 
 #[tokio::main]
@@ -123,7 +129,17 @@ async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, messages) = LspService::new(|client| Backend { client });
+    let (service, messages) = LspService::new(|client| {
+        let language = unsafe { tree_sitter_typescript() };
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(language).unwrap();
+        let parser = Arc::new(Mutex::new(parser));
+        Backend {
+            client,
+            document: None,
+            parser
+        }
+    });
     Server::new(stdin, stdout)
         .interleave(messages)
         .serve(service)

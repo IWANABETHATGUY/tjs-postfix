@@ -6,13 +6,7 @@
 import * as path from "path";
 import { workspace, ExtensionContext } from "vscode";
 
-import {
-  LanguageClient,
-  LanguageClientOptions,
-  ServerOptions,
-  TransportKind,
-  Executable
-} from "vscode-languageclient";
+import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind, Executable } from "vscode-languageclient";
 
 let client: LanguageClient;
 
@@ -27,7 +21,7 @@ export function activate(context: ExtensionContext) {
 
   // E:\vscode-extension\github\server\target\debug
   const run: Executable = {
-    command: path.resolve(__dirname, '../../server/target/debug/server.exe'),
+    command: path.resolve(__dirname, "../../server/target/debug/language-server.exe"),
   };
   const serverOptions: ServerOptions = {
     run,
@@ -39,7 +33,10 @@ export function activate(context: ExtensionContext) {
   // Options to control the language client
   let clientOptions: LanguageClientOptions = {
     // Register the server for plain text documents
-    documentSelector: [{ scheme: "file", language: "plaintext" }],
+    documentSelector: [
+      { scheme: "file", language: "plaintext" },
+      { scheme: "file", language: "typescript" },
+    ],
     synchronize: {
       // Notify the server about file changes to '.clientrc files contained in the workspace
       fileEvents: workspace.createFileSystemWatcher("**/.clientrc"),
@@ -47,12 +44,7 @@ export function activate(context: ExtensionContext) {
   };
 
   // Create the language client and start the client.
-  client = new LanguageClient(
-    "languageServerExample",
-    "Language Server Example",
-    serverOptions,
-    clientOptions
-  );
+  client = new LanguageClient("languageServerExample", "Language Server Example", serverOptions, clientOptions);
 
   // Start the client. This will also launch the server
   client.start();
