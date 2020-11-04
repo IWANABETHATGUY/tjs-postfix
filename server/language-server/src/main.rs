@@ -230,15 +230,13 @@ impl LanguageServer for Backend {
                                 Position::new(dot.line, dot.character),
                             );
 
-
-                            item.additional_text_edits = Some(vec![
-                                TextEdit::new(replace_range, replace_string),
-                            ]);
+                            item.additional_text_edits =
+                                Some(vec![TextEdit::new(replace_range, replace_string)]);
                             return Ok(Some(CompletionResponse::Array(vec![
                                 item,
                                 CompletionItem::new_simple(
-                                    format!("{:?}:{:?}", duration, before_dot),
-                                    format!("{:?}", node),
+                                    format!("{:?}", duration),
+                                    format!("{:?}: {:?}", node, replace_range),
                                 ),
                             ])));
                         }
