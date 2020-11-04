@@ -124,7 +124,40 @@ impl LanguageServer for Backend {
         let mut map = self.document_map.lock().unwrap();
         map.remove(&params.text_document.uri.to_string());
     }
-
+    // const range = document.getWordRangeAtPosition(position, /[^\s]\.[a-zA-Z]*/);
+    //     if (!range) {
+    //       return [];
+    //     }
+    //     let curNode = this.tree.rootNode.namedDescendantForPosition({
+    //       column: beforeDot.character,
+    //       row: beforeDot.line,
+    //     });
+    //     let endIndex = curNode.endIndex;
+    //     while (true) {
+    //       if (curNode.parent && curNode.parent.endIndex === endIndex && curNode.type !== "ERROR") {
+    //         curNode = curNode.parent;
+    //       } else {
+    //         break;
+    //       }
+    //     }
+    //     // console.log(curNode.type);
+    //     return this.templateList.map(template => {
+    //       const item = new CompletionItem(template.snippetKey);
+    //       item.kind = CompletionItemKind.Snippet;
+    //       item.insertText = "";
+    //       item.keepWhitespace = true;
+    //       const replaceString = `${template.functionName}(${curNode.text})`;
+    //       item.documentation = replaceString;
+    //       const replaceRange = new Range(
+    //         curNode.startPosition.row,
+    //         curNode.startPosition.column,
+    //         range.end.line,
+    //         range.end.character
+    //       );
+    //       // console.log(curNode.text);
+    //       item.additionalTextEdits = [TextEdit.replace(replaceRange, replaceString)];
+    //       return item;
+    //     });
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         if let Some(context) = params.context {
             if context.trigger_character.is_none() || context.trigger_character.unwrap() != "." {
@@ -139,14 +172,76 @@ impl LanguageServer for Backend {
                 match self.parser.lock() {
                     Ok(mut parser) => {
                         let start = Instant::now();
-                        let res = parser.parse(&document.text, None).unwrap();
+                        let tree = parser.parse(&document.text, None).unwrap();
                         let duration = start.elapsed();
-                        return Ok(Some(CompletionResponse::Array(vec![
-                            CompletionItem::new_simple(
-                                format!("{:?}", duration),
-                                format!("{:?}", res),
+
+                        let root = tree.root_node();
+                        let dot = params.text_document_position.position;
+                        let before_dot = Position::new(dot.line, dot.character - 2);
+
+                        let node = root.named_descendant_for_point_range(
+                            tree_sitter::Point::new(
+                                before_dot.line as usize,
+                                before_dot.character as usize,
                             ),
-                        ])));
+                            tree_sitter::Point::new(
+                                before_dot.line as usize,
+                                before_dot.character as usize,
+                            ),
+                        );
+
+                        if let Some(mut node) = node {
+                            let end_index = node.end_byte();
+                            while let Some(parent) = node.parent() {
+                                if !node.is_error() && parent.end_byte() == end_index {
+                                    node = parent;
+                                } else {
+                                    break;
+                                }
+                            }
+                            //       const item = new CompletionItem(template.snippetKey);
+                            //       item.kind = CompletionItemKind.Snippet;
+                            //       item.insertText = "";
+                            //       item.keepWhitespace = true;
+                            //       const replaceString = `${template.functionName}(${curNode.text})`;
+                            //       item.documentation = replaceString;
+                            //       const replaceRange = new Range(
+                            //         curNode.startPosition.row,
+                            //         curNode.startPosition.column,
+                            //         range.end.line,
+                            //         range.end.character
+                            //       );
+                            //       // console.log(curNode.text);
+                            //       item.additionalTextEdits = [TextEdit.replace(replaceRange, replaceString)];
+                            //       return item;
+                            let mut item =
+                                CompletionItem::new_simple("log".into(), "log something".into());
+                            item.kind = Some(CompletionItemKind::Snippet);
+                            item.insert_text = Some(" ".into());
+                            let replace_string =
+                                format!("{}({})", "console.log", &document.text[node.byte_range()]);
+                            item.documentation =
+                                Some(Documentation::String(replace_string.clone()));
+                            let replace_range = Range::new(
+                                Position::new(
+                                    node.start_position().row as u64,
+                                    node.start_position().column as u64,
+                                ),
+                                Position::new(dot.line, dot.character),
+                            );
+
+
+                            item.additional_text_edits = Some(vec![
+                                TextEdit::new(replace_range, replace_string),
+                            ]);
+                            return Ok(Some(CompletionResponse::Array(vec![
+                                item,
+                                CompletionItem::new_simple(
+                                    format!("{:?}:{:?}", duration, before_dot),
+                                    format!("{:?}", node),
+                                ),
+                            ])));
+                        }
                     }
                     Err(_) => {}
                 };
