@@ -1,15 +1,20 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
+use log::info;
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
+use tree_sitter::{Language, Node, Parser, TreeCursor};
 use treesitter_ts::tree_sitter_typescript;
-// #[derive(Debug)]
 struct Backend {
     client: Client,
-    document: Option<TextDocumentItem>,
-    parser: Arc<Mutex<tree_sitter::Parser>>,
+    document_map: Arc<Mutex<HashMap<String, TextDocumentItem>>>,
+    parser: Arc<Mutex<Parser>>,
 }
 
 #[tower_lsp::async_trait]
@@ -86,14 +91,27 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        let text = params.text_document;
-        self.client.log_message(MessageType::Info, text.uri).await;
+        let document_uri = params.text_document.uri.clone();
+        self.document_map
+            .lock()
+            .unwrap()
+            .insert(document_uri.to_string(), params.text_document);
+        self.client
+            .log_message(MessageType::Info, document_uri.to_string())
+            .await;
     }
 
-    async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file changed!")
-            .await;
+    async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
+        if let Some(document) = self
+            .document_map
+            .lock()
+            .unwrap()
+            .get_mut(&params.text_document.uri.to_string())
+        {
+            if let Some(content) = params.content_changes.first_mut().take() {
+                document.text = content.text.clone();
+            }
+        }
     }
 
     async fn did_save(&self, _: DidSaveTextDocumentParams) {
@@ -102,30 +120,45 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn did_close(&self, _: DidCloseTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file closed!")
-            .await;
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        let mut map = self.document_map.lock().unwrap();
+        map.remove(&params.text_document.uri.to_string());
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        if let Some(kind) = params.context.and_then(|context| context.trigger_character) {
-            if kind == "." {
-
+        if let Some(context) = params.context {
+            if context.trigger_character.is_none() || context.trigger_character.unwrap() != "." {
+                return Ok(None);
+            }
+            if let Some(document) = self
+                .document_map
+                .lock()
+                .unwrap()
+                .get(&params.text_document_position.text_document.uri.to_string())
+            {
+                match self.parser.lock() {
+                    Ok(mut parser) => {
+                        let start = Instant::now();
+                        let res = parser.parse(&document.text, None).unwrap();
+                        let duration = start.elapsed();
+                        return Ok(Some(CompletionResponse::Array(vec![
+                            CompletionItem::new_simple(
+                                format!("{:?}", duration),
+                                format!("{:?}", res),
+                            ),
+                        ])));
+                    }
+                    Err(_) => {}
+                };
             }
         }
         Ok(None)
-        // Ok(Some(CompletionResponse::Array(vec![
-        //     CompletionItem::new_simple("Hello".to_string(), "Some detail".to_string()),
-        //     CompletionItem::new_simple("Bye".to_string(), "More detail".to_string()),
-        // ])))
     }
 }
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
-
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
@@ -134,10 +167,11 @@ async fn main() {
         let mut parser = tree_sitter::Parser::new();
         parser.set_language(language).unwrap();
         let parser = Arc::new(Mutex::new(parser));
+        let document_map = Arc::new(Mutex::new(HashMap::new()));
         Backend {
             client,
-            document: None,
-            parser
+            document_map,
+            parser,
         }
     });
     Server::new(stdin, stdout)

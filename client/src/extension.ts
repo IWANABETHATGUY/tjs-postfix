@@ -21,7 +21,7 @@ export function activate(context: ExtensionContext) {
 
   // E:\vscode-extension\github\server\target\debug
   const run: Executable = {
-    command: path.resolve(__dirname, "../../server/target/debug/language-server.exe"),
+    command: path.resolve(__dirname, "../../server/target/debug/language-server.exe")
   };
   const serverOptions: ServerOptions = {
     run,
