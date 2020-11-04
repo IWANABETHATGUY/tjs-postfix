@@ -217,7 +217,6 @@ impl LanguageServer for Backend {
                             let mut item =
                                 CompletionItem::new_simple("log".into(), "log something".into());
                             item.kind = Some(CompletionItemKind::Snippet);
-                            item.insert_text = Some(" ".into());
                             let replace_string =
                                 format!("{}({})", "console.log", &document.text[node.byte_range()]);
                             item.documentation =
@@ -230,8 +229,9 @@ impl LanguageServer for Backend {
                                 Position::new(dot.line, dot.character),
                             );
 
+                            item.insert_text = Some(replace_string);
                             item.additional_text_edits =
-                                Some(vec![TextEdit::new(replace_range, replace_string)]);
+                                Some(vec![TextEdit::new(replace_range, "".into())]);
                             return Ok(Some(CompletionResponse::Array(vec![
                                 item,
                                 CompletionItem::new_simple(
