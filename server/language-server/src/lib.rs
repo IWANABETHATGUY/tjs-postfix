@@ -119,6 +119,21 @@ impl Backend {
                     )
                 }),
             },
+            SnippetCompletionItem {
+                label: String::from("var"),
+                detail: String::from("var name = expr"),
+                replace_string_generator: Box::new(|name| format!("var ${{0}} = {}", name)),
+            },
+            SnippetCompletionItem {
+                label: String::from("let"),
+                detail: String::from("let name = expr"),
+                replace_string_generator: Box::new(|name| format!("let ${{0}} = {}", name)),
+            },
+            SnippetCompletionItem {
+                label: String::from("const"),
+                detail: String::from("const name = expr"),
+                replace_string_generator: Box::new(|name| format!("const ${{0}} = {}", name)),
+            },
         ];
         snippet_list
             .into_iter()

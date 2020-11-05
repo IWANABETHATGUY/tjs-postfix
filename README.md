@@ -12,12 +12,12 @@
 - [ ] .foreach	expr.forEach(item => )
 - [x] .not	!expr
 - [ ] .return	return expr
-- [ ] .var	var name = expr
-- [ ] .let	let name = expr
-- [ ] .const	const name = expr
+- [x] .var	var name = expr
+- [x] .let	let name = expr
+- [x] .const	const name = expr
 - [x] .log	console.log(expr)
 - [x] .error	console.error(expr)
 - [x] .warn	console.warn(expr)
-- [ ] .cast	(<SomeType>expr)
+- [ ] .cast	(\<SomeType\>expr)
 - [ ] .castas	(expr as SomeType)
 - [ ] .new	new expr()
