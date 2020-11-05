@@ -1,5 +1,5 @@
 {
-  "name": "lsp-sample-multi-server",
+  "name": "tjs-postfix",
   "description": "A multi server LSP example",
   "author": "Microsoft Corporation",
   "license": "MIT",
@@ -8,7 +8,7 @@
     "type": "git",
     "url": "https://github.com/Microsoft/vscode-extension-samples"
   },
-  "publisher": "vscode-samples",
+  "publisher": "IWANABETHATGUY",
   "categories": [],
   "keywords": [
     "multi-root ready"
@@ -17,7 +17,8 @@
     "vscode": "^1.44.0"
   },
   "activationEvents": [
-    "onLanguage:plaintext"
+    "onLanguage:typescript",
+    "onLanguage:javascript"
   ],
   "main": "./client/out/extension",
   "contributes": {
@@ -63,24 +64,25 @@
   "scripts": {
     "postinstall": "cd client && npm install cd ..",
     "vscode:prepublish": "yarn run compile",
-    "compile": "tsc -b",
+    "compile": "cross-env NODE_ENV=production tsc -b",
     "watch": "tsc -b -w",
     "lint": "eslint src --ext ts",
     "pretest": "yarn run compile && yarn run lint",
     "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
-    "@types/node": "^12.12.0",
-    "typescript": "^3.9.4",
     "@types/glob": "^7.1.3",
     "@types/mocha": "^8.0.0",
+    "@types/node": "^12.12.0",
     "@types/vscode": "^1.44.0",
     "@typescript-eslint/eslint-plugin": "^3.8.0",
     "@typescript-eslint/parser": "^3.8.0",
+    "cross-env": "^7.0.2",
     "electron-rebuild": "^1.11.0",
     "eslint": "^7.6.0",
     "glob": "^7.1.6",
     "mocha": "^8.0.1",
+    "typescript": "^3.9.4",
     "vscode-test": "^1.4.0"
   }
 }

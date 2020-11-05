@@ -20,8 +20,9 @@ export function activate(context: ExtensionContext) {
   // let debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] };
 
   // E:\vscode-extension\github\server\target\debug
+  const command = "tjs-language-server.exe";
   const run: Executable = {
-    command: path.resolve(__dirname, "../../server/target/debug/language-server.exe")
+    command,
   };
   const serverOptions: ServerOptions = {
     run,
@@ -34,8 +35,8 @@ export function activate(context: ExtensionContext) {
   let clientOptions: LanguageClientOptions = {
     // Register the server for plain text documents
     documentSelector: [
-      { scheme: "file", language: "plaintext" },
       { scheme: "file", language: "typescript" },
+      { scheme: "file", language: "javascript" },
     ],
     synchronize: {
       // Notify the server about file changes to '.clientrc files contained in the workspace

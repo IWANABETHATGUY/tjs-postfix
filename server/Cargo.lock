@@ -303,20 +303,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "language-server"
-version = "0.1.0"
-dependencies = [
- "env_logger",
- "log",
- "serde",
- "serde_json",
- "tokio",
- "tower-lsp",
- "tree-sitter",
- "treesitter-ts",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -689,6 +675,20 @@ name = "tinyvec"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "238ce071d267c5710f9d31451efec16c5ee22de34df17cc05e56cbc92e967117"
+
+[[package]]
+name = "tjs-language-server"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-lsp",
+ "tree-sitter",
+ "treesitter-ts",
+]
 
 [[package]]
 name = "tokio"
