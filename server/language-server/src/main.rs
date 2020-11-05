@@ -96,17 +96,17 @@ impl Backend {
         dot: &Position,
     ) -> Vec<CompletionItem> {
         let mut completion_list = vec![];;
-        let mut item = CompletionItem::new_simple(
+        let mut not_item = CompletionItem::new_simple(
             "not".into(),
             "revert a variable or expression".into(), 
         );
-        item.insert_text_format = Some(InsertTextFormat::Snippet);
-        item.kind = Some(CompletionItemKind::Snippet);
+        not_item.insert_text_format = Some(InsertTextFormat::Snippet);
+        not_item.kind = Some(CompletionItemKind::Snippet);
         let replace_string = format!(
             "!{}",
             &document.text[node.byte_range()]
         );
-        item.documentation = Some(Documentation::String(replace_string.clone()));
+        not_item.documentation = Some(Documentation::String(replace_string.clone()));
         let replace_range = Range::new(
             Position::new(
                 node.start_position().row as u64,
@@ -115,9 +115,35 @@ impl Backend {
             Position::new(dot.line, dot.character),
         );
 
-        item.insert_text = Some(replace_string);
-        item.additional_text_edits = Some(vec![TextEdit::new(replace_range, "".into())]);
-        completion_list.push(item);
+        not_item.insert_text = Some(replace_string);
+        not_item.additional_text_edits = Some(vec![TextEdit::new(replace_range, "".into())]);
+        completion_list.push(not_item);
+        
+        let mut if_item = CompletionItem::new_simple(
+            "if".into(),
+            "if (expr)".into(), 
+        );
+        if_item.insert_text_format = Some(InsertTextFormat::Snippet);
+        if_item.kind = Some(CompletionItemKind::Snippet);
+        let replace_string = format!(
+r#"if ({}) {{
+    ${{0}}
+}}"#,
+            &document.text[node.byte_range()]
+        );
+        if_item.documentation = Some(Documentation::String(replace_string.clone()));
+        let replace_range = Range::new(
+            Position::new(
+                node.start_position().row as u64,
+                node.start_position().column as u64,
+            ),
+            Position::new(dot.line, dot.character),
+        );
+
+        if_item.insert_text = Some(replace_string);
+        if_item.additional_text_edits = Some(vec![TextEdit::new(replace_range, "".into())]);
+
+        completion_list.push(if_item);
         completion_list
     }
 }
