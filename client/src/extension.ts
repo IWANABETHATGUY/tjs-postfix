@@ -23,6 +23,11 @@ export function activate(context: ExtensionContext) {
   const command = "tjs-language-server.exe";
   const run: Executable = {
     command,
+    options: {
+      env: {
+        "RUST_LOG": "debug"
+      }
+    }
   };
   const serverOptions: ServerOptions = {
     run,

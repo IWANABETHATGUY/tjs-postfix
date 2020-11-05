@@ -5,18 +5,50 @@ use std::{
 };
 
 use log::info;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 use tree_sitter::{Language, Node, Parser, TreeCursor};
 use treesitter_ts::tree_sitter_typescript;
+
+#[derive(Serialize, Deserialize, Debug)]
+struct PostfixTemplate {
+    snippetKey: String,
+    functionName: String,
+}
+
 struct Backend {
     client: Client,
     document_map: Arc<Mutex<HashMap<String, TextDocumentItem>>>,
     parser: Arc<Mutex<Parser>>,
+    postfix_template_list: Arc<Mutex<Vec<PostfixTemplate>>>,
 }
-
+impl Backend {
+    async fn reset_templates(&self) {
+        let configuration = self
+            .client
+            .configuration(vec![ConfigurationItem {
+                scope_uri: None,
+                section: Some("tjs-postfix.templateMapList".into()),
+            }])
+            .await;
+        if let Ok(mut configuration) = configuration {
+            if let Ok(configuration) = serde_json::from_value::<Vec<PostfixTemplate>>(
+                configuration.first_mut().unwrap().take(),
+            ) {
+                match self.postfix_template_list.lock() {
+                    Ok(mut list) => {
+                        list.clear();
+                        list.extend(configuration);
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
+    }
+}
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
@@ -49,6 +81,7 @@ impl LanguageServer for Backend {
     }
 
     async fn initialized(&self, _: InitializedParams) {
+        self.reset_templates().await;
         self.client
             .log_message(MessageType::Info, "initialized!")
             .await;
@@ -65,6 +98,7 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
+        self.reset_templates().await;
         self.client
             .log_message(MessageType::Info, "configuration changed!")
             .await;
@@ -96,9 +130,6 @@ impl LanguageServer for Backend {
             .lock()
             .unwrap()
             .insert(document_uri.to_string(), params.text_document);
-        self.client
-            .log_message(MessageType::Info, document_uri.to_string())
-            .await;
     }
 
     async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
@@ -124,40 +155,7 @@ impl LanguageServer for Backend {
         let mut map = self.document_map.lock().unwrap();
         map.remove(&params.text_document.uri.to_string());
     }
-    // const range = document.getWordRangeAtPosition(position, /[^\s]\.[a-zA-Z]*/);
-    //     if (!range) {
-    //       return [];
-    //     }
-    //     let curNode = this.tree.rootNode.namedDescendantForPosition({
-    //       column: beforeDot.character,
-    //       row: beforeDot.line,
-    //     });
-    //     let endIndex = curNode.endIndex;
-    //     while (true) {
-    //       if (curNode.parent && curNode.parent.endIndex === endIndex && curNode.type !== "ERROR") {
-    //         curNode = curNode.parent;
-    //       } else {
-    //         break;
-    //       }
-    //     }
-    //     // console.log(curNode.type);
-    //     return this.templateList.map(template => {
-    //       const item = new CompletionItem(template.snippetKey);
-    //       item.kind = CompletionItemKind.Snippet;
-    //       item.insertText = "";
-    //       item.keepWhitespace = true;
-    //       const replaceString = `${template.functionName}(${curNode.text})`;
-    //       item.documentation = replaceString;
-    //       const replaceRange = new Range(
-    //         curNode.startPosition.row,
-    //         curNode.startPosition.column,
-    //         range.end.line,
-    //         range.end.character
-    //       );
-    //       // console.log(curNode.text);
-    //       item.additionalTextEdits = [TextEdit.replace(replaceRange, replaceString)];
-    //       return item;
-    //     });
+
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         if let Some(context) = params.context {
             if context.trigger_character.is_none() || context.trigger_character.unwrap() != "." {
@@ -199,46 +197,45 @@ impl LanguageServer for Backend {
                                     break;
                                 }
                             }
-                            //       const item = new CompletionItem(template.snippetKey);
-                            //       item.kind = CompletionItemKind.Snippet;
-                            //       item.insertText = "";
-                            //       item.keepWhitespace = true;
-                            //       const replaceString = `${template.functionName}(${curNode.text})`;
-                            //       item.documentation = replaceString;
-                            //       const replaceRange = new Range(
-                            //         curNode.startPosition.row,
-                            //         curNode.startPosition.column,
-                            //         range.end.line,
-                            //         range.end.character
-                            //       );
-                            //       // console.log(curNode.text);
-                            //       item.additionalTextEdits = [TextEdit.replace(replaceRange, replaceString)];
-                            //       return item;
-                            let mut item =
-                                CompletionItem::new_simple("log".into(), "log something".into());
-                            item.kind = Some(CompletionItemKind::Snippet);
-                            let replace_string =
-                                format!("{}({})", "console.log", &document.text[node.byte_range()]);
-                            item.documentation =
-                                Some(Documentation::String(replace_string.clone()));
-                            let replace_range = Range::new(
-                                Position::new(
-                                    node.start_position().row as u64,
-                                    node.start_position().column as u64,
-                                ),
-                                Position::new(dot.line, dot.character),
-                            );
+                            let mut template_item_list =
+                                if let Ok(template_list) = self.postfix_template_list.lock() {
+                                    template_list
+                                        .iter()
+                                        .map(|template_item| {
+                                            let mut item = CompletionItem::new_simple(
+                                                template_item.snippetKey.clone(),
+                                                template_item.functionName.clone(),
+                                            );
+                                            item.kind = Some(CompletionItemKind::Snippet);
+                                            let replace_string = format!(
+                                                "{}({})",
+                                                &template_item.functionName,
+                                                &document.text[node.byte_range()]
+                                            );
+                                            item.documentation =
+                                                Some(Documentation::String(replace_string.clone()));
+                                            let replace_range = Range::new(
+                                                Position::new(
+                                                    node.start_position().row as u64,
+                                                    node.start_position().column as u64,
+                                                ),
+                                                Position::new(dot.line, dot.character),
+                                            );
 
-                            item.insert_text = Some(replace_string);
-                            item.additional_text_edits =
-                                Some(vec![TextEdit::new(replace_range, "".into())]);
-                            return Ok(Some(CompletionResponse::Array(vec![
-                                item,
-                                CompletionItem::new_simple(
-                                    format!("{:?}", duration),
-                                    format!("{:?}: {:?}", node, replace_range),
-                                ),
-                            ])));
+                                            item.insert_text = Some(replace_string);
+                                            item.additional_text_edits =
+                                                Some(vec![TextEdit::new(replace_range, "".into())]);
+                                            item
+                                        })
+                                        .collect()
+                                } else {
+                                    vec![]
+                                };
+                            template_item_list.push(CompletionItem::new_simple(
+                                format!("{:?}", duration),
+                                format!("{:?}: {:?}", node, Range::default()),
+                            ));
+                            return Ok(Some(CompletionResponse::Array(template_item_list)));
                         }
                     }
                     Err(_) => {}
@@ -261,10 +258,12 @@ async fn main() {
         parser.set_language(language).unwrap();
         let parser = Arc::new(Mutex::new(parser));
         let document_map = Arc::new(Mutex::new(HashMap::new()));
+        let postfix_template_list = Arc::new(Mutex::new(vec![]));
         Backend {
             client,
             document_map,
             parser,
+            postfix_template_list,
         }
     });
     Server::new(stdin, stdout)
