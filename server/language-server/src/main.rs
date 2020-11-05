@@ -48,6 +48,78 @@ impl Backend {
             }
         }
     }
+
+    fn get_template_completion_item_list(
+        &self,
+        node: &Node,
+        document: &TextDocumentItem,
+        dot: &Position,
+    ) -> Vec<CompletionItem> {
+        if let Ok(template_list) = self.postfix_template_list.lock() {
+            template_list
+                .iter()
+                .map(|template_item| {
+                    let mut item = CompletionItem::new_simple(
+                        template_item.snippetKey.clone(),
+                        template_item.functionName.clone(),
+                    );
+                    item.kind = Some(CompletionItemKind::Snippet);
+                    let replace_string = format!(
+                        "{}({})",
+                        &template_item.functionName,
+                        &document.text[node.byte_range()]
+                    );
+                    item.documentation = Some(Documentation::String(replace_string.clone()));
+                    let replace_range = Range::new(
+                        Position::new(
+                            node.start_position().row as u64,
+                            node.start_position().column as u64,
+                        ),
+                        Position::new(dot.line, dot.character),
+                    );
+
+                    item.insert_text = Some(replace_string);
+                    item.additional_text_edits =
+                        Some(vec![TextEdit::new(replace_range, "".into())]);
+                    item
+                })
+                .collect()
+        } else {
+            vec![]
+        }
+    }
+
+    fn get_snippet_completion_item_list(
+        &self,
+        node: &Node,
+        document: &TextDocumentItem,
+        dot: &Position,
+    ) -> Vec<CompletionItem> {
+        let mut completion_list = vec![];;
+        let mut item = CompletionItem::new_simple(
+            "not".into(),
+            "revert a variable or expression".into(), 
+        );
+        item.insert_text_format = Some(InsertTextFormat::Snippet);
+        item.kind = Some(CompletionItemKind::Snippet);
+        let replace_string = format!(
+            "!{}",
+            &document.text[node.byte_range()]
+        );
+        item.documentation = Some(Documentation::String(replace_string.clone()));
+        let replace_range = Range::new(
+            Position::new(
+                node.start_position().row as u64,
+                node.start_position().column as u64,
+            ),
+            Position::new(dot.line, dot.character),
+        );
+
+        item.insert_text = Some(replace_string);
+        item.additional_text_edits = Some(vec![TextEdit::new(replace_range, "".into())]);
+        completion_list.push(item);
+        completion_list
+    }
 }
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
@@ -191,46 +263,15 @@ impl LanguageServer for Backend {
                         if let Some(mut node) = node {
                             let end_index = node.end_byte();
                             while let Some(parent) = node.parent() {
-                                if !node.is_error() && parent.end_byte() == end_index {
+                                if !node.is_error() && parent.kind().contains("expression") && parent.end_byte() == end_index {
                                     node = parent;
                                 } else {
                                     break;
                                 }
                             }
                             let mut template_item_list =
-                                if let Ok(template_list) = self.postfix_template_list.lock() {
-                                    template_list
-                                        .iter()
-                                        .map(|template_item| {
-                                            let mut item = CompletionItem::new_simple(
-                                                template_item.snippetKey.clone(),
-                                                template_item.functionName.clone(),
-                                            );
-                                            item.kind = Some(CompletionItemKind::Snippet);
-                                            let replace_string = format!(
-                                                "{}({})",
-                                                &template_item.functionName,
-                                                &document.text[node.byte_range()]
-                                            );
-                                            item.documentation =
-                                                Some(Documentation::String(replace_string.clone()));
-                                            let replace_range = Range::new(
-                                                Position::new(
-                                                    node.start_position().row as u64,
-                                                    node.start_position().column as u64,
-                                                ),
-                                                Position::new(dot.line, dot.character),
-                                            );
-
-                                            item.insert_text = Some(replace_string);
-                                            item.additional_text_edits =
-                                                Some(vec![TextEdit::new(replace_range, "".into())]);
-                                            item
-                                        })
-                                        .collect()
-                                } else {
-                                    vec![]
-                                };
+                                self.get_template_completion_item_list(&node, document, &dot);
+                            template_item_list.extend(self.get_snippet_completion_item_list(&node, document, &dot));
                             template_item_list.push(CompletionItem::new_simple(
                                 format!("{:?}", duration),
                                 format!("{:?}: {:?}", node, Range::default()),
