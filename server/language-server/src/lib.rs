@@ -4,14 +4,12 @@ use std::{
     time::Instant,
 };
 
-use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
-use tower_lsp::{Client, LanguageServer, LspService, Server};
-use tree_sitter::{Language, Node, Parser, TreeCursor};
-use treesitter_ts::tree_sitter_typescript;
+use tower_lsp::{Client, LanguageServer};
+use tree_sitter::Parser;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PostfixTemplate {
@@ -134,7 +132,6 @@ impl Backend {
                 detail: String::from("const name = expr"),
                 replace_string_generator: Box::new(|name| format!("const ${{0}} = {}", name)),
             },
-
             SnippetCompletionItem {
                 label: String::from("cast"),
                 detail: String::from("(<name>expr)"),
@@ -145,7 +142,6 @@ impl Backend {
                 detail: String::from("(expr as name)"),
                 replace_string_generator: Box::new(|name| format!("({} as ${{0}})", name)),
             },
-
             SnippetCompletionItem {
                 label: String::from("new"),
                 detail: String::from("new expr()"),
@@ -155,6 +151,43 @@ impl Backend {
                 label: String::from("return"),
                 detail: String::from("return expr"),
                 replace_string_generator: Box::new(|name| format!("return {}", name)),
+            },
+            // foreach
+            SnippetCompletionItem {
+                label: String::from("for"),
+                detail: String::from("forloop"),
+                replace_string_generator: Box::new(|name| {
+                    format!(
+                        r#"for (let ${{1:i}} = 0, len = {}.length; ${{1:i}} < len; ${{1:i}}++) {{
+  ${{0}}
+}}"#,
+                        name
+                    )
+                }),
+            },
+            SnippetCompletionItem {
+                label: String::from("forof"),
+                detail: String::from("forof"),
+                replace_string_generator: Box::new(|name| {
+                    format!(
+                        r#"for (let ${{1:item}} of {}) {{
+  ${{0}}
+}}"#,
+                        name
+                    )
+                }),
+            },
+            SnippetCompletionItem {
+                label: String::from("foreach"),
+                detail: String::from("expr.forEach(item => )"),
+                replace_string_generator: Box::new(|name| {
+                    format!(
+                        r#"{}.forEach(${{1:item}} => {{
+    ${{0}}
+}})"#,
+                        name
+                    )
+                }),
             },
         ];
         snippet_list
