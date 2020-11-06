@@ -134,6 +134,28 @@ impl Backend {
                 detail: String::from("const name = expr"),
                 replace_string_generator: Box::new(|name| format!("const ${{0}} = {}", name)),
             },
+
+            SnippetCompletionItem {
+                label: String::from("cast"),
+                detail: String::from("(<name>expr)"),
+                replace_string_generator: Box::new(|name| format!("(<${{0}}>{})", name)),
+            },
+            SnippetCompletionItem {
+                label: String::from("as"),
+                detail: String::from("(expr as name)"),
+                replace_string_generator: Box::new(|name| format!("({} as ${{0}})", name)),
+            },
+
+            SnippetCompletionItem {
+                label: String::from("new"),
+                detail: String::from("new expr()"),
+                replace_string_generator: Box::new(|name| format!("new {}()", name)),
+            },
+            SnippetCompletionItem {
+                label: String::from("return"),
+                detail: String::from("return expr"),
+                replace_string_generator: Box::new(|name| format!("return {}", name)),
+            },
         ];
         snippet_list
             .into_iter()
@@ -278,7 +300,7 @@ impl LanguageServer for Backend {
 
                         let root = tree.root_node();
                         let dot = params.text_document_position.position;
-                        let before_dot = Position::new(dot.line, dot.character - 2);
+                        let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
 
                         let node = root.named_descendant_for_point_range(
                             tree_sitter::Point::new(

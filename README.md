@@ -11,13 +11,13 @@
 - [ ] .forof	for (let item of expr)
 - [ ] .foreach	expr.forEach(item => )
 - [x] .not	!expr
-- [ ] .return	return expr
+- [x] .return	return expr
 - [x] .var	var name = expr
 - [x] .let	let name = expr
 - [x] .const	const name = expr
 - [x] .log	console.log(expr)
 - [x] .error	console.error(expr)
 - [x] .warn	console.warn(expr)
-- [ ] .cast	(\<SomeType\>expr)
-- [ ] .castas	(expr as SomeType)
-- [ ] .new	new expr()
+- [x] .cast	(\<SomeType\>expr)
+- [x] .castas	(expr as SomeType)
+- [x] .new	new expr()
