@@ -4,6 +4,7 @@ use std::{
     time::Instant,
 };
 
+use lsp_text_document::FullTextDocument;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
@@ -24,14 +25,14 @@ pub struct SnippetCompletionItem {
 }
 pub struct Backend {
     client: Client,
-    document_map: Arc<Mutex<HashMap<String, TextDocumentItem>>>,
+    document_map: Arc<Mutex<HashMap<String, FullTextDocument>>>,
     parser: Arc<Mutex<Parser>>,
     postfix_template_list: Arc<Mutex<Vec<PostfixTemplate>>>,
 }
 impl Backend {
     pub fn new(
         client: Client,
-        document_map: Arc<Mutex<HashMap<String, TextDocumentItem>>>,
+        document_map: Arc<Mutex<HashMap<String, FullTextDocument>>>,
         parser: Arc<Mutex<Parser>>,
         postfix_template_list: Arc<Mutex<Vec<PostfixTemplate>>>,
     ) -> Self {
@@ -214,7 +215,7 @@ impl LanguageServer for Backend {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Full,
+                    TextDocumentSyncKind::Incremental,
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
@@ -283,11 +284,16 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        let document_uri = params.text_document.uri.clone();
-        self.document_map
-            .lock()
-            .unwrap()
-            .insert(document_uri.to_string(), params.text_document);
+        let TextDocumentItem {
+            uri,
+            language_id,
+            version,
+            text,
+        } = params.text_document;
+        self.document_map.lock().unwrap().insert(
+            uri.to_string(),
+            FullTextDocument::new(uri, language_id, version, text),
+        );
     }
 
     async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
@@ -297,9 +303,30 @@ impl LanguageServer for Backend {
             .unwrap()
             .get_mut(&params.text_document.uri.to_string())
         {
-            if let Some(content) = params.content_changes.first_mut().take() {
-                document.text = content.text.clone();
-            }
+            let changes = params
+                .content_changes
+                .into_iter()
+                .map(|change| {
+                    let range = change.range.and_then(|range| {
+                        Some(lsp_types::Range {
+                            start: lsp_types::Position::new(
+                                range.start.line,
+                                range.start.character,
+                            ),
+                            end: lsp_types::Position::new(range.end.line, range.end.character),
+                        })
+                    });
+                    lsp_types::TextDocumentContentChangeEvent {
+                        range,
+                        range_length: change.range_length,
+                        text: change.text,
+                    }
+                })
+                .collect();
+            document.update(changes);
+            // if let Some(content) = params.content_changes.first_mut().take() {
+            //     document.text = content.text.clone();
+            // }
         }
     }
 
