@@ -4,6 +4,7 @@ use std::{
     time::Instant,
 };
 
+use log::debug;
 use lsp_text_document::FullTextDocument;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -297,6 +298,7 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
+        // debug!("{:?}", params.content_changes);
         if let Some(document) = self
             .document_map
             .lock()
@@ -323,7 +325,13 @@ impl LanguageServer for Backend {
                     }
                 })
                 .collect();
-            document.update(changes);
+            let version = if let Some(version) = params.text_document.version {
+                version
+            } else {
+                document.version
+            };
+            document.update(changes, version);
+            // debug!("{:?}", document.text);
             // if let Some(content) = params.content_changes.first_mut().take() {
             //     document.text = content.text.clone();
             // }
