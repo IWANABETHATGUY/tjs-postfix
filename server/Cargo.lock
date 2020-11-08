@@ -336,7 +336,7 @@ dependencies = [
 [[package]]
 name = "lsp-text-document"
 version = "0.1.0"
-source = "git+https://github.com/IWANABETHATGUY/lsp-text-document#f06552f66445de19a498c40ef88d4b8b93bb829c"
+source = "git+https://github.com/IWANABETHATGUY/lsp-text-document#075a9e4d871270be2e1e008561d31b1f93c36cb5"
 dependencies = [
  "lsp-types 0.83.0",
 ]

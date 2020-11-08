@@ -4,15 +4,16 @@ use std::{
     time::Instant,
 };
 
-use log::debug;
+use helper::get_tree_sitter_edit_from_change;
+use log::{debug, error};
 use lsp_text_document::FullTextDocument;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
-use tree_sitter::Parser;
-
+use tree_sitter::{Parser, Tree};
+mod helper;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PostfixTemplate {
     snippetKey: String,
@@ -28,6 +29,7 @@ pub struct Backend {
     client: Client,
     document_map: Arc<Mutex<HashMap<String, FullTextDocument>>>,
     parser: Arc<Mutex<Parser>>,
+    parse_tree_map: Arc<Mutex<HashMap<String, Tree>>>,
     postfix_template_list: Arc<Mutex<Vec<PostfixTemplate>>>,
 }
 impl Backend {
@@ -36,12 +38,14 @@ impl Backend {
         document_map: Arc<Mutex<HashMap<String, FullTextDocument>>>,
         parser: Arc<Mutex<Parser>>,
         postfix_template_list: Arc<Mutex<Vec<PostfixTemplate>>>,
+        parse_tree_map: Arc<Mutex<HashMap<String, Tree>>>,
     ) -> Self {
         Self {
             client,
             document_map,
             parser,
             postfix_template_list,
+            parse_tree_map,
         }
     }
 
@@ -291,6 +295,10 @@ impl LanguageServer for Backend {
             version,
             text,
         } = params.text_document;
+        self.parse_tree_map.lock().unwrap().insert(
+            uri.to_string(),
+            self.parser.lock().unwrap().parse(&text, None).unwrap(),
+        );
         self.document_map.lock().unwrap().insert(
             uri.to_string(),
             FullTextDocument::new(uri, language_id, version, text),
@@ -298,14 +306,13 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
-        // debug!("{:?}", params.content_changes);
         if let Some(document) = self
             .document_map
             .lock()
             .unwrap()
             .get_mut(&params.text_document.uri.to_string())
         {
-            let changes = params
+            let changes: Vec<lsp_types::TextDocumentContentChangeEvent> = params
                 .content_changes
                 .into_iter()
                 .map(|change| {
@@ -330,11 +337,30 @@ impl LanguageServer for Backend {
             } else {
                 document.version
             };
-            document.update(changes, version);
-            // debug!("{:?}", document.text);
-            // if let Some(content) = params.content_changes.first_mut().take() {
-            //     document.text = content.text.clone();
-            // }
+            let mut parser = match self.parser.lock() {
+                Ok(parser) => parser,
+                Err(_) => {
+                    error!("can't hold the parser lock");
+                    return;
+                }
+            };
+            let mut parse_tree_map = match self.parse_tree_map.lock() {
+                Ok(map) => map,
+                Err(_) => {
+                    error!("can't hold the parse tree map lock");
+                    return;
+                }
+            };
+            let start = Instant::now();
+            let tree = parse_tree_map
+                .get_mut(&params.text_document.uri.to_string())
+                .unwrap();
+            for change in changes {
+                tree.edit(&get_tree_sitter_edit_from_change(&change, document).unwrap());
+                document.update(vec![change], version);
+                *tree = parser.parse(&document.text, Some(tree)).unwrap();
+            }
+            debug!("{:?}", start.elapsed())
         }
     }
 
@@ -360,62 +386,68 @@ impl LanguageServer for Backend {
                 .unwrap()
                 .get(&params.text_document_position.text_document.uri.to_string())
             {
-                match self.parser.lock() {
-                    Ok(mut parser) => {
+                match self.parse_tree_map.lock() {
+                    Ok(map) => {
                         let start = Instant::now();
-                        let tree = parser.parse(&document.text, None).unwrap();
-                        let duration = start.elapsed();
 
-                        let root = tree.root_node();
-                        let dot = params.text_document_position.position;
-                        let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
+                        let tree = map.get(&document.uri.to_string());
+                        if let Some(tree) = tree {
+                            let duration = start.elapsed();
 
-                        let node = root.named_descendant_for_point_range(
-                            tree_sitter::Point::new(
-                                before_dot.line as usize,
-                                before_dot.character as usize,
-                            ),
-                            tree_sitter::Point::new(
-                                before_dot.line as usize,
-                                before_dot.character as usize,
-                            ),
-                        );
+                            let root = tree.root_node();
+                            let dot = params.text_document_position.position;
+                            let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
 
-                        if let Some(mut node) = node {
-                            let end_index = node.end_byte();
-                            while let Some(parent) = node.parent() {
-                                if !node.is_error()
-                                    && parent.kind().contains("expression")
-                                    && parent.end_byte() == end_index
-                                {
-                                    node = parent;
-                                } else {
-                                    break;
-                                }
-                            }
-                            let replace_range = Range::new(
-                                Position::new(
-                                    node.start_position().row as u64,
-                                    node.start_position().column as u64,
+                            let node = root.named_descendant_for_point_range(
+                                tree_sitter::Point::new(
+                                    before_dot.line as usize,
+                                    before_dot.character as usize,
                                 ),
-                                Position::new(dot.line, dot.character),
+                                tree_sitter::Point::new(
+                                    before_dot.line as usize,
+                                    before_dot.character as usize,
+                                ),
                             );
 
-                            let source_code = &document.text[node.byte_range()];
+                            if let Some(mut node) = node {
+                                let end_index = node.end_byte();
+                                while let Some(parent) = node.parent() {
+                                    if !node.is_error()
+                                        && parent.kind().contains("expression")
+                                        && parent.end_byte() == end_index
+                                    {
+                                        node = parent;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                let replace_range = Range::new(
+                                    Position::new(
+                                        node.start_position().row as u64,
+                                        node.start_position().column as u64,
+                                    ),
+                                    Position::new(dot.line, dot.character),
+                                );
 
-                            let mut template_item_list = self.get_template_completion_item_list(
-                                source_code.to_string(),
-                                &replace_range,
-                            );
-                            template_item_list.extend(self.get_snippet_completion_item_list(
-                                source_code.to_string(),
-                                &replace_range,
-                            ));
-                            template_item_list.push(CompletionItem::new_simple(
-                                format!("{:?}", duration),
-                                format!("{:?}: {:?}", node, Range::default()),
-                            ));
-                            return Ok(Some(CompletionResponse::Array(template_item_list)));
+                                let source_code = &document.text[node.byte_range()];
+
+                                let mut template_item_list = self
+                                    .get_template_completion_item_list(
+                                        source_code.to_string(),
+                                        &replace_range,
+                                    );
+                                template_item_list.extend(self.get_snippet_completion_item_list(
+                                    source_code.to_string(),
+                                    &replace_range,
+                                ));
+                                template_item_list.push(CompletionItem::new_simple(
+                                    format!("{:?}", duration),
+                                    format!("{:?}: {:?}", node, Range::default()),
+                                ));
+                                return Ok(Some(CompletionResponse::Array(template_item_list)));
+                            }
+                        } else {
+                            return Ok(None);
                         }
                     }
                     Err(_) => {}

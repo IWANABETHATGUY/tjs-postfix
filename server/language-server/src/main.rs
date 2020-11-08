@@ -18,8 +18,9 @@ async fn main() {
         parser.set_language(language).unwrap();
         let parser = Arc::new(Mutex::new(parser));
         let document_map = Arc::new(Mutex::new(HashMap::new()));
+        let parse_tree_map = Arc::new(Mutex::new(HashMap::new()));
         let postfix_template_list = Arc::new(Mutex::new(vec![]));
-        Backend::new(client, document_map, parser, postfix_template_list)
+        Backend::new(client, document_map, parser, postfix_template_list, parse_tree_map)
     });
     Server::new(stdin, stdout)
         .interleave(messages)
