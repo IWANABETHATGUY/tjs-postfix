@@ -42,6 +42,7 @@ export function activate(context: ExtensionContext) {
     documentSelector: [
       { scheme: "file", language: "typescript" },
       { scheme: "file", language: "javascript" },
+      { scheme: "file", language: "vue" },
     ],
     synchronize: {
       // Notify the server about file changes to '.clientrc files contained in the workspace

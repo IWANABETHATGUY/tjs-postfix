@@ -18,7 +18,8 @@
   },
   "activationEvents": [
     "onLanguage:typescript",
-    "onLanguage:javascript"
+    "onLanguage:javascript",
+    "onLanguage:vue"
   ],
   "main": "./client/out/extension",
   "contributes": {
