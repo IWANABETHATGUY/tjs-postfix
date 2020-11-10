@@ -15,11 +15,8 @@ pub fn get_tree_sitter_edit_from_change(
         line: range.start.line,
         character: range.start.character,
     });
-    let old_end_byte = document.offset_at(Position {
-        line: range.end.line,
-        character: range.end.character,
-    });
-    let new_end_byte = old_end_byte - range_length as usize + text.len();
+    let old_end_byte = start_byte + range_length as usize;
+    let new_end_byte = start_byte + text.len();
     let new_end_position = document.position_at(new_end_byte as u64);
     let old_end_position = document.position_at(old_end_byte as u64);
     let start_position = document.position_at(start_byte as u64);

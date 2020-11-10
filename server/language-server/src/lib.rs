@@ -337,29 +337,22 @@ impl LanguageServer for Backend {
             } else {
                 document.version
             };
-            let mut parser = match self.parser.lock() {
-                Ok(parser) => parser,
-                Err(_) => {
-                    error!("can't hold the parser lock");
-                    return;
-                }
-            };
-            let mut parse_tree_map = match self.parse_tree_map.lock() {
-                Ok(map) => map,
-                Err(_) => {
-                    error!("can't hold the parse tree map lock");
-                    return;
-                }
-            };
+            // let mut parse_tree_map = match self.parse_tree_map.lock() {
+            //     Ok(map) => map,
+            //     Err(_) => {
+            //         error!("can't hold the parse tree map lock");
+            //         return;
+            //     }
+            // };
             let start = Instant::now();
-            let tree = parse_tree_map
-                .get_mut(&params.text_document.uri.to_string())
-                .unwrap();
+            // let tree = parse_tree_map
+            //     .get_mut(&params.text_document.uri.to_string())
+            //     .unwrap();
             for change in changes {
-                tree.edit(&get_tree_sitter_edit_from_change(&change, document).unwrap());
+                // tree.edit(&get_tree_sitter_edit_from_change(&change, document).unwrap());
                 document.update(vec![change], version);
-                *tree = parser.parse(&document.text, Some(tree)).unwrap();
             }
+            // *tree = parser.parse(&document.text, Some(tree)).unwrap();
             debug!("{:?}", start.elapsed())
         }
     }
@@ -386,11 +379,11 @@ impl LanguageServer for Backend {
                 .unwrap()
                 .get(&params.text_document_position.text_document.uri.to_string())
             {
-                match self.parse_tree_map.lock() {
-                    Ok(map) => {
+                match self.parser.lock() {
+                    Ok(mut parser) => {
                         let start = Instant::now();
 
-                        let tree = map.get(&document.uri.to_string());
+                        let tree = parser.parse(&document.text, None);
                         if let Some(tree) = tree {
                             let duration = start.elapsed();
 
