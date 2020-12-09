@@ -228,7 +228,7 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                 }),
                 execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["dummy.do_something".to_string()],
+                    commands: vec!["tjs.hello".to_string()],
                     work_done_progress_options: Default::default(),
                 }),
                 workspace: Some(WorkspaceCapability {
@@ -273,17 +273,20 @@ impl LanguageServer for Backend {
             .log_message(MessageType::Info, "watched files have changed!")
             .await;
     }
-
-    async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        params.range
+    }
+    async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
+        debug!("{:?}", params);
         self.client
             .log_message(MessageType::Info, "command executed!")
             .await;
 
-        match self.client.apply_edit(WorkspaceEdit::default()).await {
-            Ok(res) if res.applied => self.client.log_message(MessageType::Info, "applied").await,
-            Ok(_) => self.client.log_message(MessageType::Info, "rejected").await,
-            Err(err) => self.client.log_message(MessageType::Error, err).await,
-        }
+        // match self.client.apply_edit(WorkspaceEdit::default()).await {
+        //     Ok(res) if res.applied => self.client.log_message(MessageType::Info, "applied").await,
+        //     Ok(_) => self.client.log_message(MessageType::Info, "rejected").await,
+        //     Err(err) => self.client.log_message(MessageType::Error, err).await,
+        // }
 
         Ok(None)
     }
@@ -319,15 +322,15 @@ impl LanguageServer for Backend {
                     let range = change.range.and_then(|range| {
                         Some(lsp_types::Range {
                             start: lsp_types::Position::new(
-                                range.start.line,
-                                range.start.character,
+                                range.start.line as u32,
+                                range.start.character as u32,
                             ),
-                            end: lsp_types::Position::new(range.end.line, range.end.character),
+                            end: lsp_types::Position::new(range.end.line as u32, range.end.character as u32),
                         })
                     });
                     lsp_types::TextDocumentContentChangeEvent {
                         range,
-                        range_length: change.range_length,
+                        range_length: change.range_length.and_then(|v| Some(v as u32)),
                         text: change.text,
                     }
                 })
