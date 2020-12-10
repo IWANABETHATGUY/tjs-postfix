@@ -228,10 +228,6 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                 }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
-                execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["tjs.hello".to_string()],
-                    work_done_progress_options: Default::default(),
-                }),
                 workspace: Some(WorkspaceCapability {
                     workspace_folders: Some(WorkspaceFolderCapability {
                         supported: Some(true),
@@ -284,11 +280,10 @@ impl LanguageServer for Backend {
         {
             match self.parser.lock() {
                 Ok(mut parser) => {
-                    let start = Instant::now();
+                    let duration = Instant::now();
 
                     let tree = parser.parse(&document.text, None);
                     if let Some(tree) = tree {
-                        let duration = start.elapsed();
 
                         let root = tree.root_node();
                         let Range { start, end } = params.range;
@@ -339,6 +334,7 @@ impl LanguageServer for Backend {
                                     return Ok(None);
                                 }
                             }
+                            debug!("code-action: {:?}", duration.elapsed());
                             return Ok(Some(code_action));
                         }
                     } else {

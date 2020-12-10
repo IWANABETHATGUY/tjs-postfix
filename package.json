@@ -23,12 +23,6 @@
   ],
   "main": "./client/out/extension",
   "contributes": {
-    "commands": [
-      {
-        "command": "tjs.hello",
-        "title": "Hello World"
-      }
-    ],
     "configuration": {
       "type": "object",
       "title": "Multi LSP configuration",
