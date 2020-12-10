@@ -227,10 +227,7 @@ impl LanguageServer for Backend {
                     trigger_characters: Some(vec![".".to_string()]),
                     work_done_progress_options: Default::default(),
                 }),
-                execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["dummy.do_something".to_string()],
-                    work_done_progress_options: Default::default(),
-                }),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 workspace: Some(WorkspaceCapability {
                     workspace_folders: Some(WorkspaceFolderCapability {
                         supported: Some(true),
@@ -273,17 +270,93 @@ impl LanguageServer for Backend {
             .log_message(MessageType::Info, "watched files have changed!")
             .await;
     }
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
+        let mut code_action = CodeActionResponse::new();
+        if let Some(document) = self
+            .document_map
+            .lock()
+            .unwrap()
+            .get(&params.text_document.uri.to_string())
+        {
+            match self.parser.lock() {
+                Ok(mut parser) => {
+                    let duration = Instant::now();
 
-    async fn execute_command(&self, _: ExecuteCommandParams) -> Result<Option<Value>> {
+                    let tree = parser.parse(&document.text, None);
+                    if let Some(tree) = tree {
+
+                        let root = tree.root_node();
+                        let Range { start, end } = params.range;
+
+                        let node = root.named_descendant_for_point_range(
+                            tree_sitter::Point::new(start.line as usize, end.character as usize),
+                            tree_sitter::Point::new(end.line as usize, end.character as usize),
+                        );
+
+                        if let Some(node) = node {
+                            if (node.kind() != "property_identifier") {
+                                return Ok(None);
+                            }
+                            match node.parent() {
+                                Some(parent) if parent.kind() == "member_expression" => {
+                                    let object_node = parent.child_by_field_name("object");
+                                    if let Some(object) = object_node {
+                                        let replace_range = Range::new(
+                                            Position::new(
+                                                parent.start_position().row as u64,
+                                                parent.start_position().column as u64,
+                                            ),
+                                            Position::new(
+                                                parent.end_position().row as u64,
+                                                parent.end_position().column as u64,
+                                            ),
+                                        );
+                                        let object_source_code = &document.text[object.byte_range()];
+                                        let function = &document.text[node.byte_range()];
+                                        let edit = TextEdit::new(replace_range.clone(), format!("{}({})", function, object_source_code));
+                                        let mut changes = HashMap::new();
+                                        changes.insert(params.text_document.uri, vec![edit]);
+                                        code_action.push(CodeActionOrCommand::CodeAction(
+                                            CodeAction {
+                                                title: "call this function".to_string(),
+                                                kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                                                diagnostics: None,
+                                                edit: Some(WorkspaceEdit::new(changes)),
+                                                command: None,
+                                                is_preferred: Some(false),
+                                            },
+                                        ));
+                                    } else {
+                                        return Ok(None);
+                                    }
+                                }
+                                _ => {
+                                    return Ok(None);
+                                }
+                            }
+                            debug!("code-action: {:?}", duration.elapsed());
+                            return Ok(Some(code_action));
+                        }
+                    } else {
+                        return Ok(None);
+                    }
+                }
+                Err(_) => return Ok(None),
+            };
+        }
+        unimplemented!() // TODO
+    }
+    async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
+        debug!("{:?}", params);
         self.client
             .log_message(MessageType::Info, "command executed!")
             .await;
 
-        match self.client.apply_edit(WorkspaceEdit::default()).await {
-            Ok(res) if res.applied => self.client.log_message(MessageType::Info, "applied").await,
-            Ok(_) => self.client.log_message(MessageType::Info, "rejected").await,
-            Err(err) => self.client.log_message(MessageType::Error, err).await,
-        }
+        // match self.client.apply_edit(WorkspaceEdit::default()).await {
+        //     Ok(res) if res.applied => self.client.log_message(MessageType::Info, "applied").await,
+        //     Ok(_) => self.client.log_message(MessageType::Info, "rejected").await,
+        //     Err(err) => self.client.log_message(MessageType::Error, err).await,
+        // }
 
         Ok(None)
     }
@@ -305,7 +378,7 @@ impl LanguageServer for Backend {
         );
     }
 
-    async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
         if let Some(document) = self
             .document_map
             .lock()
@@ -319,15 +392,18 @@ impl LanguageServer for Backend {
                     let range = change.range.and_then(|range| {
                         Some(lsp_types::Range {
                             start: lsp_types::Position::new(
-                                range.start.line,
-                                range.start.character,
+                                range.start.line as u32,
+                                range.start.character as u32,
                             ),
-                            end: lsp_types::Position::new(range.end.line, range.end.character),
+                            end: lsp_types::Position::new(
+                                range.end.line as u32,
+                                range.end.character as u32,
+                            ),
                         })
                     });
                     lsp_types::TextDocumentContentChangeEvent {
                         range,
-                        range_length: change.range_length,
+                        range_length: change.range_length.and_then(|v| Some(v as u32)),
                         text: change.text,
                     }
                 })

@@ -17,9 +17,9 @@ pub fn get_tree_sitter_edit_from_change(
     });
     let old_end_byte = start_byte + range_length as usize;
     let new_end_byte = start_byte + text.len();
-    let new_end_position = document.position_at(new_end_byte as u64);
-    let old_end_position = document.position_at(old_end_byte as u64);
-    let start_position = document.position_at(start_byte as u64);
+    let new_end_position = document.position_at(new_end_byte as u32);
+    let old_end_position = document.position_at(old_end_byte as u32);
+    let start_position = document.position_at(start_byte as u32);
     Some(InputEdit {
         start_byte,
         old_end_byte,

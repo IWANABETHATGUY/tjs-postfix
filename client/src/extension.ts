@@ -25,6 +25,7 @@ export function activate(context: ExtensionContext) {
     command,
     options: {
       env: {
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         "RUST_LOG": "debug"
       }
     }
@@ -55,6 +56,7 @@ export function activate(context: ExtensionContext) {
 
   // Start the client. This will also launch the server
   client.start();
+
 }
 
 export function deactivate(): Thenable<void> | undefined {
