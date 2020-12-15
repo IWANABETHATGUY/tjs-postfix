@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, PoisonError},
     time::Instant,
 };
 
@@ -284,7 +284,6 @@ impl LanguageServer for Backend {
 
                     let tree = parser.parse(&document.text, None);
                     if let Some(tree) = tree {
-
                         let root = tree.root_node();
                         let Range { start, end } = params.range;
 
@@ -311,9 +310,13 @@ impl LanguageServer for Backend {
                                                 parent.end_position().column as u64,
                                             ),
                                         );
-                                        let object_source_code = &document.text[object.byte_range()];
+                                        let object_source_code =
+                                            &document.text[object.byte_range()];
                                         let function = &document.text[node.byte_range()];
-                                        let edit = TextEdit::new(replace_range.clone(), format!("{}({})", function, object_source_code));
+                                        let edit = TextEdit::new(
+                                            replace_range.clone(),
+                                            format!("{}({})", function, object_source_code),
+                                        );
                                         let mut changes = HashMap::new();
                                         changes.insert(params.text_document.uri, vec![edit]);
                                         code_action.push(CodeActionOrCommand::CodeAction(
@@ -413,23 +416,33 @@ impl LanguageServer for Backend {
             } else {
                 document.version
             };
-            // let mut parse_tree_map = match self.parse_tree_map.lock() {
-            //     Ok(map) => map,
-            //     Err(_) => {
-            //         error!("can't hold the parse tree map lock");
-            //         return;
-            //     }
-            // };
-            let start = Instant::now();
-            // let tree = parse_tree_map
-            //     .get_mut(&params.text_document.uri.to_string())
-            //     .unwrap();
+            let mut parse_tree_map = match self.parse_tree_map.lock() {
+                Ok(map) => map,
+                Err(_) => {
+                    error!("can't hold the parse tree map lock");
+                    return;
+                }
+            };
+            let tree = parse_tree_map
+                .get_mut(&params.text_document.uri.to_string())
+                .unwrap();
+            // let start = Instant::now();
             for change in changes {
-                // tree.edit(&get_tree_sitter_edit_from_change(&change, document).unwrap());
+                tree.edit(&get_tree_sitter_edit_from_change(&change, document).unwrap());
                 document.update(vec![change], version);
             }
-            // *tree = parser.parse(&document.text, Some(tree)).unwrap();
-            debug!("{:?}", start.elapsed())
+            // debug!("incremental updating: {:?}", start.elapsed());
+
+            // let start = Instant::now();
+            match self.parser.lock() {
+                Ok(mut parser) => {
+                    let new_tree = parser.parse(&document.text, Some(tree)).unwrap();
+                    parse_tree_map.insert(params.text_document.uri.to_string(), new_tree);
+                }
+                Err(_) => {}
+            }
+            // debug!("incremental parser: {:?}", start.elapsed());
+            debug!("{:?}", document.text);
         }
     }
 
@@ -445,8 +458,9 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        if let Some(context) = params.context {
-            if context.trigger_character.is_none() || context.trigger_character.unwrap() != "." {
+        if let Some(ref context) = params.context {
+            let trigger_character = context.trigger_character.clone();
+            if trigger_character.is_none() || trigger_character.unwrap() != "." {
                 return Ok(None);
             }
             if let Some(document) = self
@@ -455,71 +469,67 @@ impl LanguageServer for Backend {
                 .unwrap()
                 .get(&params.text_document_position.text_document.uri.to_string())
             {
-                match self.parser.lock() {
-                    Ok(mut parser) => {
+                let map = self.parse_tree_map.lock().unwrap();
+                let tree = map.get(&params.text_document_position.text_document.uri.to_string());
+                match tree {
+                    Some(tree) => {
                         let start = Instant::now();
 
-                        let tree = parser.parse(&document.text, None);
-                        if let Some(tree) = tree {
-                            let duration = start.elapsed();
+                        let duration = start.elapsed();
 
-                            let root = tree.root_node();
-                            let dot = params.text_document_position.position;
-                            let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
+                        let root = tree.root_node();
+                        let dot = params.text_document_position.position;
+                        let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
 
-                            let node = root.named_descendant_for_point_range(
-                                tree_sitter::Point::new(
-                                    before_dot.line as usize,
-                                    before_dot.character as usize,
+                        let node = root.named_descendant_for_point_range(
+                            tree_sitter::Point::new(
+                                before_dot.line as usize,
+                                before_dot.character as usize,
+                            ),
+                            tree_sitter::Point::new(
+                                before_dot.line as usize,
+                                before_dot.character as usize,
+                            ),
+                        );
+
+                        if let Some(mut node) = node {
+                            let end_index = node.end_byte();
+                            while let Some(parent) = node.parent() {
+                                if !node.is_error()
+                                    && parent.kind().contains("expression")
+                                    && parent.end_byte() == end_index
+                                {
+                                    node = parent;
+                                } else {
+                                    break;
+                                }
+                            }
+                            let replace_range = Range::new(
+                                Position::new(
+                                    node.start_position().row as u64,
+                                    node.start_position().column as u64,
                                 ),
-                                tree_sitter::Point::new(
-                                    before_dot.line as usize,
-                                    before_dot.character as usize,
-                                ),
+                                Position::new(dot.line, dot.character),
                             );
 
-                            if let Some(mut node) = node {
-                                let end_index = node.end_byte();
-                                while let Some(parent) = node.parent() {
-                                    if !node.is_error()
-                                        && parent.kind().contains("expression")
-                                        && parent.end_byte() == end_index
-                                    {
-                                        node = parent;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                let replace_range = Range::new(
-                                    Position::new(
-                                        node.start_position().row as u64,
-                                        node.start_position().column as u64,
-                                    ),
-                                    Position::new(dot.line, dot.character),
-                                );
+                            let source_code = &document.text[node.byte_range()];
 
-                                let source_code = &document.text[node.byte_range()];
-
-                                let mut template_item_list = self
-                                    .get_template_completion_item_list(
-                                        source_code.to_string(),
-                                        &replace_range,
-                                    );
-                                template_item_list.extend(self.get_snippet_completion_item_list(
-                                    source_code.to_string(),
-                                    &replace_range,
-                                ));
-                                template_item_list.push(CompletionItem::new_simple(
-                                    format!("{:?}", duration),
-                                    format!("{:?}: {:?}", node, Range::default()),
-                                ));
-                                return Ok(Some(CompletionResponse::Array(template_item_list)));
-                            }
-                        } else {
-                            return Ok(None);
+                            let mut template_item_list = self.get_template_completion_item_list(
+                                source_code.to_string(),
+                                &replace_range,
+                            );
+                            template_item_list.extend(self.get_snippet_completion_item_list(
+                                source_code.to_string(),
+                                &replace_range,
+                            ));
+                            template_item_list.push(CompletionItem::new_simple(
+                                format!("{:?}", duration),
+                                format!("{:?}: {:?}", node, Range::default()),
+                            ));
+                            return Ok(Some(CompletionResponse::Array(template_item_list)));
                         }
                     }
-                    Err(_) => {}
+                    _ => {}
                 };
             }
         }
