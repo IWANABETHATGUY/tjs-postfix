@@ -4,7 +4,8 @@ use std::{
     time::Instant,
 };
 
-use helper::get_tree_sitter_edit_from_change;
+use codespan_lsp::position_to_byte_index;
+// use helper::get_tree_sitter_edit_from_change;
 use log::{debug, error};
 use lsp_text_document::FullTextDocument;
 use serde::{Deserialize, Serialize};
@@ -284,7 +285,6 @@ impl LanguageServer for Backend {
 
                     let tree = parser.parse(&document.text, None);
                     if let Some(tree) = tree {
-
                         let root = tree.root_node();
                         let Range { start, end } = params.range;
 
@@ -311,9 +311,13 @@ impl LanguageServer for Backend {
                                                 parent.end_position().column as u64,
                                             ),
                                         );
-                                        let object_source_code = &document.text[object.byte_range()];
+                                        let object_source_code =
+                                            &document.text[object.byte_range()];
                                         let function = &document.text[node.byte_range()];
-                                        let edit = TextEdit::new(replace_range.clone(), format!("{}({})", function, object_source_code));
+                                        let edit = TextEdit::new(
+                                            replace_range.clone(),
+                                            format!("{}({})", function, object_source_code),
+                                        );
                                         let mut changes = HashMap::new();
                                         changes.insert(params.text_document.uri, vec![edit]);
                                         code_action.push(CodeActionOrCommand::CodeAction(
@@ -445,6 +449,7 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        use codespan_reporting::files::{Location, SimpleFiles};
         if let Some(context) = params.context {
             if context.trigger_character.is_none() || context.trigger_character.unwrap() != "." {
                 return Ok(None);
@@ -466,16 +471,23 @@ impl LanguageServer for Backend {
                             let root = tree.root_node();
                             let dot = params.text_document_position.position;
                             let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
-
-                            let node = root.named_descendant_for_point_range(
-                                tree_sitter::Point::new(
-                                    before_dot.line as usize,
-                                    before_dot.character as usize,
+                            let start = Instant::now();
+                            let mut files = SimpleFiles::new();
+                            let file_id = files.add("test", &document.text);
+                            // this is utf8 based bytes index
+                            let byte_index = position_to_byte_index(
+                                &files,
+                                file_id,
+                                &lsp_types::Position::new(
+                                    before_dot.line as u32,
+                                    before_dot.character as u32,
                                 ),
-                                tree_sitter::Point::new(
-                                    before_dot.line as usize,
-                                    before_dot.character as usize,
-                                ),
+                            )
+                            .unwrap();
+                            debug!("code-lsp: {:?}", start.elapsed());
+                            let node = root.named_descendant_for_byte_range(
+                               byte_index, 
+                               byte_index
                             );
 
                             if let Some(mut node) = node {
