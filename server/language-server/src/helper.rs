@@ -1,6 +1,7 @@
+use log::debug;
 use lsp_text_document::FullTextDocument;
 use lsp_types::{Position, TextDocumentContentChangeEvent};
-use tree_sitter::InputEdit;
+use tree_sitter::{InputEdit, Node};
 pub fn get_tree_sitter_edit_from_change(
     change: &TextDocumentContentChangeEvent,
     document: &mut FullTextDocument,
@@ -37,4 +38,27 @@ pub fn get_tree_sitter_edit_from_change(
             column: new_end_position.character as usize,
         },
     })
+}
+
+pub fn pretty_print(source_code: &str, root: Node, level: usize) {
+    if !root.is_named() {
+        return
+        // println!("{:?}", &source_code[root.start_byte()..root.end_byte()]);
+    }
+    let kind = root.kind();
+    let start = root.range;
+    let end = root.end_position();
+    debug!(
+        "{}{} [{}, {}] - [{}, {}] ",
+        " ".repeat(level * 2),
+        kind,
+        start.row,
+        start.column,
+        end.row,
+        end.column
+    );
+    for i in 0..root.child_count() {
+        let node = root.child(i).unwrap();
+        pretty_print(source_code, node, level + 1);
+    }
 }

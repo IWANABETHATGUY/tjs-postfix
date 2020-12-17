@@ -39,13 +39,13 @@ fn pretty_print(source_code: &str, root: Node, level: usize) {
     let start = root.start_position();
     let end = root.end_position();
     println!(
-        "{}{} [{}, {}] - [{}, {}] ",
+        "{}{} [{}, {}] - [{}, {}] | {:?}{:?} ",
         " ".repeat(level * 2),
         kind,
         start.row,
         start.column,
         end.row,
-        end.column
+        end.column,
     );
     for i in 0..root.child_count() {
         let node = root.child(i).unwrap();

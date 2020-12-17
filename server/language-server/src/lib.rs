@@ -4,7 +4,7 @@ use std::{
     time::Instant,
 };
 
-use helper::get_tree_sitter_edit_from_change;
+use helper::{get_tree_sitter_edit_from_change, pretty_print};
 use log::{debug, error};
 use lsp_text_document::FullTextDocument;
 use serde::{Deserialize, Serialize};
@@ -371,9 +371,11 @@ impl LanguageServer for Backend {
             version,
             text,
         } = params.text_document;
+        let tree = self.parser.lock().unwrap().parse(&text, None).unwrap();
+        pretty_print(&text, tree.root_node(), 0);
         self.parse_tree_map.lock().unwrap().insert(
             uri.to_string(),
-            self.parser.lock().unwrap().parse(&text, None).unwrap(),
+            tree,
         );
         self.document_map.lock().unwrap().insert(
             uri.to_string(),
