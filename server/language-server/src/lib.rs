@@ -306,52 +306,65 @@ impl LanguageServer for Backend {
                         &lsp_types::Position::new(end.line as u32, end.character as u32),
                     )
                     .unwrap();
-                    let node = root.named_descendant_for_byte_range(start_byte, end_byte);
-                    if let Some(node) = node {
-                        if (node.kind() != "property_identifier") {
-                            return Ok(None);
-                        }
-                        match node.parent() {
-                            Some(parent) if parent.kind() == "member_expression" => {
-                                let object_node = parent.child_by_field_name("object");
-                                if let Some(object) = object_node {
-                                    let replace_range = Range::new(
-                                        Position::new(
-                                            parent.start_position().row as u64,
-                                            parent.start_position().column as u64,
-                                        ),
-                                        Position::new(
-                                            parent.end_position().row as u64,
-                                            parent.end_position().column as u64,
-                                        ),
-                                    );
-                                    let object_source_code = &document.text[object.byte_range()];
-                                    let function = &document.text[node.byte_range()];
-                                    let edit = TextEdit::new(
-                                        replace_range.clone(),
-                                        format!("{}({})", function, object_source_code),
-                                    );
-                                    let mut changes = HashMap::new();
-                                    changes.insert(params.text_document.uri, vec![edit]);
-                                    code_action.push(CodeActionOrCommand::CodeAction(CodeAction {
-                                        title: "call this function".to_string(),
-                                        kind: Some(CodeActionKind::REFACTOR_REWRITE),
-                                        diagnostics: None,
-                                        edit: Some(WorkspaceEdit::new(changes)),
-                                        command: None,
-                                        is_preferred: Some(false),
-                                    }));
-                                } else {
-                                    return Ok(None);
-                                }
-                            }
-                            _ => {
+                    let start_node = root.named_descendant_for_byte_range(start_byte, start_byte);
+                    let end_node = root.named_descendant_for_byte_range(end_byte, end_byte);
+                    if start_node.is_none() || end_node.is_none() {
+                        return Ok(None);
+                    }
+                    let start_node = start_node.unwrap();
+                    let end_node = end_node.unwrap();
+                    if start_node.kind() != "property_identifier"
+                        || end_node.kind() != "property_identifier"
+                    {
+                        return Ok(None);
+                    }
+                    match (start_node.parent(), end_node.parent()) {
+                        (Some(sp), Some(ep))
+                            if sp.kind() == "member_expression"
+                                && ep.kind() == "member_expression" =>
+                        {
+                            let start_object_node = sp.child_by_field_name("object");
+                            let end_object_node = ep.child_by_field_name("object");
+                            if let (Some(start), Some(end)) = (start_object_node, end_object_node) {
+                                let replace_range = Range::new(
+                                    Position::new(
+                                        ep.start_position().row as u64,
+                                        ep.start_position().column as u64,
+                                    ),
+                                    Position::new(
+                                        ep.end_position().row as u64,
+                                        ep.end_position().column as u64,
+                                    ),
+                                );
+                                let object_source_code = &document.text[start.byte_range()];
+                                let function = &document.text[start_node.start_byte()..end_node.end_byte()];
+
+                                let replaced_code = format!("{}({})", function, object_source_code);
+                                
+                                let edit = TextEdit::new(
+                                    replace_range,
+                                    replaced_code.clone()
+                                );
+                                let mut changes = HashMap::new();
+                                changes.insert(params.text_document.uri, vec![edit]);
+                                code_action.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                    title: format!("call this function -> {}", replaced_code),
+                                    kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                                    diagnostics: None,
+                                    edit: Some(WorkspaceEdit::new(changes)),
+                                    command: None,
+                                    is_preferred: Some(false),
+                                }));
+                            } else {
                                 return Ok(None);
                             }
                         }
-                        debug!("code-action: {:?}", duration.elapsed());
-                        return Ok(Some(code_action));
+                        _ => {
+                            return Ok(None);
+                        }
                     }
+                    debug!("code-action: {:?}", duration.elapsed());
+                    return Ok(Some(code_action));
                 }
                 _ => {}
             }
