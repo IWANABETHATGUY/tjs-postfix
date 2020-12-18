@@ -5,6 +5,7 @@ use std::{
 };
 
 use codespan_lsp::position_to_byte_index;
+use codespan_reporting::files::SimpleFiles;
 use helper::{get_tree_sitter_edit_from_change, pretty_print};
 // use helper::get_tree_sitter_edit_from_change;
 use log::{debug, error};
@@ -280,79 +281,85 @@ impl LanguageServer for Backend {
             .unwrap()
             .get(&params.text_document.uri.to_string())
         {
-            match self.parser.lock() {
-                Ok(mut parser) => {
+            let map = self.parse_tree_map.lock().unwrap();
+            let tree = map.get(&params.text_document.uri.to_string());
+            match tree {
+                Some(tree) => {
                     let duration = Instant::now();
+                    let root = tree.root_node();
+                    let range = params.range;
+                    let start = range.start;
+                    let end = range.end;
 
-                    let tree = parser.parse(&document.text, None);
-                    if let Some(tree) = tree {
-                        let root = tree.root_node();
-                        let Range { start, end } = params.range;
-
-                        let node = root.named_descendant_for_point_range(
-                            tree_sitter::Point::new(start.line as usize, end.character as usize),
-                            tree_sitter::Point::new(end.line as usize, end.character as usize),
-                        );
-
-                        if let Some(node) = node {
-                            if (node.kind() != "property_identifier") {
-                                return Ok(None);
-                            }
-                            match node.parent() {
-                                Some(parent) if parent.kind() == "member_expression" => {
-                                    let object_node = parent.child_by_field_name("object");
-                                    if let Some(object) = object_node {
-                                        let replace_range = Range::new(
-                                            Position::new(
-                                                parent.start_position().row as u64,
-                                                parent.start_position().column as u64,
-                                            ),
-                                            Position::new(
-                                                parent.end_position().row as u64,
-                                                parent.end_position().column as u64,
-                                            ),
-                                        );
-                                        let object_source_code =
-                                            &document.text[object.byte_range()];
-                                        let function = &document.text[node.byte_range()];
-                                        let edit = TextEdit::new(
-                                            replace_range.clone(),
-                                            format!("{}({})", function, object_source_code),
-                                        );
-                                        let mut changes = HashMap::new();
-                                        changes.insert(params.text_document.uri, vec![edit]);
-                                        code_action.push(CodeActionOrCommand::CodeAction(
-                                            CodeAction {
-                                                title: "call this function".to_string(),
-                                                kind: Some(CodeActionKind::REFACTOR_REWRITE),
-                                                diagnostics: None,
-                                                edit: Some(WorkspaceEdit::new(changes)),
-                                                command: None,
-                                                is_preferred: Some(false),
-                                            },
-                                        ));
-                                    } else {
-                                        return Ok(None);
-                                    }
-                                }
-                                _ => {
+                    let mut files = SimpleFiles::new();
+                    let file_id = files.add("test", &document.text);
+                    // this is utf8 based bytes index
+                    let start_byte = position_to_byte_index(
+                        &files,
+                        file_id,
+                        &lsp_types::Position::new(start.line as u32, start.character as u32),
+                    )
+                    .unwrap();
+                    let end_byte = position_to_byte_index(
+                        &files,
+                        file_id,
+                        &lsp_types::Position::new(end.line as u32, end.character as u32),
+                    )
+                    .unwrap();
+                    let node = root.named_descendant_for_byte_range(start_byte, end_byte);
+                    if let Some(node) = node {
+                        if (node.kind() != "property_identifier") {
+                            return Ok(None);
+                        }
+                        match node.parent() {
+                            Some(parent) if parent.kind() == "member_expression" => {
+                                let object_node = parent.child_by_field_name("object");
+                                if let Some(object) = object_node {
+                                    let replace_range = Range::new(
+                                        Position::new(
+                                            parent.start_position().row as u64,
+                                            parent.start_position().column as u64,
+                                        ),
+                                        Position::new(
+                                            parent.end_position().row as u64,
+                                            parent.end_position().column as u64,
+                                        ),
+                                    );
+                                    let object_source_code = &document.text[object.byte_range()];
+                                    let function = &document.text[node.byte_range()];
+                                    let edit = TextEdit::new(
+                                        replace_range.clone(),
+                                        format!("{}({})", function, object_source_code),
+                                    );
+                                    let mut changes = HashMap::new();
+                                    changes.insert(params.text_document.uri, vec![edit]);
+                                    code_action.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                        title: "call this function".to_string(),
+                                        kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                                        diagnostics: None,
+                                        edit: Some(WorkspaceEdit::new(changes)),
+                                        command: None,
+                                        is_preferred: Some(false),
+                                    }));
+                                } else {
                                     return Ok(None);
                                 }
                             }
-                            debug!("code-action: {:?}", duration.elapsed());
-                            return Ok(Some(code_action));
+                            _ => {
+                                return Ok(None);
+                            }
                         }
-                    } else {
-                        return Ok(None);
+                        debug!("code-action: {:?}", duration.elapsed());
+                        return Ok(Some(code_action));
                     }
                 }
-                Err(_) => return Ok(None),
-            };
+                _ => {}
+            }
         }
         unimplemented!() // TODO
     }
+
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
-        debug!("{:?}", params);
         self.client
             .log_message(MessageType::Info, "command executed!")
             .await;
@@ -374,7 +381,6 @@ impl LanguageServer for Backend {
             text,
         } = params.text_document;
         let tree = self.parser.lock().unwrap().parse(&text, None).unwrap();
-        pretty_print(&text, tree.root_node(), 0);
         self.parse_tree_map
             .lock()
             .unwrap()
@@ -430,14 +436,13 @@ impl LanguageServer for Backend {
             let tree = parse_tree_map
                 .get_mut(&params.text_document.uri.to_string())
                 .unwrap();
-            // let start = Instant::now();
+            let start = Instant::now();
             for change in changes {
                 tree.edit(&get_tree_sitter_edit_from_change(&change, document).unwrap());
                 document.update(vec![change], version);
             }
-            // debug!("incremental updating: {:?}", start.elapsed());
+            debug!("incremental updating: {:?}", start.elapsed());
 
-            // let start = Instant::now();
             match self.parser.lock() {
                 Ok(mut parser) => {
                     let new_tree = parser.parse(&document.text, Some(tree)).unwrap();
@@ -445,8 +450,6 @@ impl LanguageServer for Backend {
                 }
                 Err(_) => {}
             }
-            // debug!("incremental parser: {:?}", start.elapsed());
-            debug!("{:?}", document.text);
         }
     }
 
@@ -478,13 +481,9 @@ impl LanguageServer for Backend {
                 match tree {
                     Some(tree) => {
                         let start = Instant::now();
-
-                        let duration = start.elapsed();
-
                         let root = tree.root_node();
                         let dot = params.text_document_position.position;
                         let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
-                        let start = Instant::now();
                         let mut files = SimpleFiles::new();
                         let file_id = files.add("test", &document.text);
                         // this is utf8 based bytes index
@@ -497,7 +496,6 @@ impl LanguageServer for Backend {
                             ),
                         )
                         .unwrap();
-                        debug!("code-lsp: {:?}", start.elapsed());
                         let node = root.named_descendant_for_byte_range(byte_index, byte_index);
 
                         if let Some(mut node) = node {
@@ -531,7 +529,7 @@ impl LanguageServer for Backend {
                                 &replace_range,
                             ));
                             template_item_list.push(CompletionItem::new_simple(
-                                format!("{:?}", duration),
+                                format!("{:?}", start.elapsed()),
                                 format!("{:?}: {:?}", node, Range::default()),
                             ));
                             return Ok(Some(CompletionResponse::Array(template_item_list)));

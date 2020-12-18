@@ -39,7 +39,7 @@ fn pretty_print(source_code: &str, root: Node, level: usize) {
     let start = root.start_position();
     let end = root.end_position();
     println!(
-        "{}{} [{}, {}] - [{}, {}] | {:?}{:?} ",
+        "{}{} [{}, {}] - [{}, {}] ",
         " ".repeat(level * 2),
         kind,
         start.row,
