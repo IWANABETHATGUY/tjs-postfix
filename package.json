@@ -51,7 +51,7 @@
     }
   },
   "scripts": {
-    "postinstall": "cd client && npm install cd ..",
+    "postinstall": "cd client && npm install && cd ..",
     "vscode:prepublish": "yarn run compile",
     "compile": "cross-env NODE_ENV=production tsc -b",
     "watch": "tsc -b -w",

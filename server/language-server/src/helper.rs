@@ -46,7 +46,7 @@ pub fn pretty_print(source_code: &str, root: Node, level: usize) {
         // println!("{:?}", &source_code[root.start_byte()..root.end_byte()]);
     }
     let kind = root.kind();
-    let start = root.range;
+    let start = root.start_position();
     let end = root.end_position();
     debug!(
         "{}{} [{}, {}] - [{}, {}] ",
