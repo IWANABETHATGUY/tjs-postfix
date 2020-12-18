@@ -1,10 +1,12 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, PoisonError},
     time::Instant,
 };
 
 use codespan_lsp::position_to_byte_index;
+use codespan_reporting::files::SimpleFiles;
+use helper::{get_tree_sitter_edit_from_change, pretty_print};
 // use helper::get_tree_sitter_edit_from_change;
 use log::{debug, error};
 use lsp_text_document::FullTextDocument;
@@ -279,79 +281,85 @@ impl LanguageServer for Backend {
             .unwrap()
             .get(&params.text_document.uri.to_string())
         {
-            match self.parser.lock() {
-                Ok(mut parser) => {
+            let map = self.parse_tree_map.lock().unwrap();
+            let tree = map.get(&params.text_document.uri.to_string());
+            match tree {
+                Some(tree) => {
                     let duration = Instant::now();
+                    let root = tree.root_node();
+                    let range = params.range;
+                    let start = range.start;
+                    let end = range.end;
 
-                    let tree = parser.parse(&document.text, None);
-                    if let Some(tree) = tree {
-                        let root = tree.root_node();
-                        let Range { start, end } = params.range;
-
-                        let node = root.named_descendant_for_point_range(
-                            tree_sitter::Point::new(start.line as usize, end.character as usize),
-                            tree_sitter::Point::new(end.line as usize, end.character as usize),
-                        );
-
-                        if let Some(node) = node {
-                            if (node.kind() != "property_identifier") {
-                                return Ok(None);
-                            }
-                            match node.parent() {
-                                Some(parent) if parent.kind() == "member_expression" => {
-                                    let object_node = parent.child_by_field_name("object");
-                                    if let Some(object) = object_node {
-                                        let replace_range = Range::new(
-                                            Position::new(
-                                                parent.start_position().row as u64,
-                                                parent.start_position().column as u64,
-                                            ),
-                                            Position::new(
-                                                parent.end_position().row as u64,
-                                                parent.end_position().column as u64,
-                                            ),
-                                        );
-                                        let object_source_code =
-                                            &document.text[object.byte_range()];
-                                        let function = &document.text[node.byte_range()];
-                                        let edit = TextEdit::new(
-                                            replace_range.clone(),
-                                            format!("{}({})", function, object_source_code),
-                                        );
-                                        let mut changes = HashMap::new();
-                                        changes.insert(params.text_document.uri, vec![edit]);
-                                        code_action.push(CodeActionOrCommand::CodeAction(
-                                            CodeAction {
-                                                title: "call this function".to_string(),
-                                                kind: Some(CodeActionKind::REFACTOR_REWRITE),
-                                                diagnostics: None,
-                                                edit: Some(WorkspaceEdit::new(changes)),
-                                                command: None,
-                                                is_preferred: Some(false),
-                                            },
-                                        ));
-                                    } else {
-                                        return Ok(None);
-                                    }
-                                }
-                                _ => {
+                    let mut files = SimpleFiles::new();
+                    let file_id = files.add("test", &document.text);
+                    // this is utf8 based bytes index
+                    let start_byte = position_to_byte_index(
+                        &files,
+                        file_id,
+                        &lsp_types::Position::new(start.line as u32, start.character as u32),
+                    )
+                    .unwrap();
+                    let end_byte = position_to_byte_index(
+                        &files,
+                        file_id,
+                        &lsp_types::Position::new(end.line as u32, end.character as u32),
+                    )
+                    .unwrap();
+                    let node = root.named_descendant_for_byte_range(start_byte, end_byte);
+                    if let Some(node) = node {
+                        if (node.kind() != "property_identifier") {
+                            return Ok(None);
+                        }
+                        match node.parent() {
+                            Some(parent) if parent.kind() == "member_expression" => {
+                                let object_node = parent.child_by_field_name("object");
+                                if let Some(object) = object_node {
+                                    let replace_range = Range::new(
+                                        Position::new(
+                                            parent.start_position().row as u64,
+                                            parent.start_position().column as u64,
+                                        ),
+                                        Position::new(
+                                            parent.end_position().row as u64,
+                                            parent.end_position().column as u64,
+                                        ),
+                                    );
+                                    let object_source_code = &document.text[object.byte_range()];
+                                    let function = &document.text[node.byte_range()];
+                                    let edit = TextEdit::new(
+                                        replace_range.clone(),
+                                        format!("{}({})", function, object_source_code),
+                                    );
+                                    let mut changes = HashMap::new();
+                                    changes.insert(params.text_document.uri, vec![edit]);
+                                    code_action.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                        title: "call this function".to_string(),
+                                        kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                                        diagnostics: None,
+                                        edit: Some(WorkspaceEdit::new(changes)),
+                                        command: None,
+                                        is_preferred: Some(false),
+                                    }));
+                                } else {
                                     return Ok(None);
                                 }
                             }
-                            debug!("code-action: {:?}", duration.elapsed());
-                            return Ok(Some(code_action));
+                            _ => {
+                                return Ok(None);
+                            }
                         }
-                    } else {
-                        return Ok(None);
+                        debug!("code-action: {:?}", duration.elapsed());
+                        return Ok(Some(code_action));
                     }
                 }
-                Err(_) => return Ok(None),
-            };
+                _ => {}
+            }
         }
         unimplemented!() // TODO
     }
+
     async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
-        debug!("{:?}", params);
         self.client
             .log_message(MessageType::Info, "command executed!")
             .await;
@@ -372,10 +380,11 @@ impl LanguageServer for Backend {
             version,
             text,
         } = params.text_document;
-        self.parse_tree_map.lock().unwrap().insert(
-            uri.to_string(),
-            self.parser.lock().unwrap().parse(&text, None).unwrap(),
-        );
+        let tree = self.parser.lock().unwrap().parse(&text, None).unwrap();
+        self.parse_tree_map
+            .lock()
+            .unwrap()
+            .insert(uri.to_string(), tree);
         self.document_map.lock().unwrap().insert(
             uri.to_string(),
             FullTextDocument::new(uri, language_id, version, text),
@@ -417,23 +426,30 @@ impl LanguageServer for Backend {
             } else {
                 document.version
             };
-            // let mut parse_tree_map = match self.parse_tree_map.lock() {
-            //     Ok(map) => map,
-            //     Err(_) => {
-            //         error!("can't hold the parse tree map lock");
-            //         return;
-            //     }
-            // };
+            let mut parse_tree_map = match self.parse_tree_map.lock() {
+                Ok(map) => map,
+                Err(_) => {
+                    error!("can't hold the parse tree map lock");
+                    return;
+                }
+            };
+            let tree = parse_tree_map
+                .get_mut(&params.text_document.uri.to_string())
+                .unwrap();
             let start = Instant::now();
-            // let tree = parse_tree_map
-            //     .get_mut(&params.text_document.uri.to_string())
-            //     .unwrap();
             for change in changes {
-                // tree.edit(&get_tree_sitter_edit_from_change(&change, document).unwrap());
+                tree.edit(&get_tree_sitter_edit_from_change(&change, document).unwrap());
                 document.update(vec![change], version);
             }
-            // *tree = parser.parse(&document.text, Some(tree)).unwrap();
-            debug!("{:?}", start.elapsed())
+            debug!("incremental updating: {:?}", start.elapsed());
+
+            match self.parser.lock() {
+                Ok(mut parser) => {
+                    let new_tree = parser.parse(&document.text, Some(tree)).unwrap();
+                    parse_tree_map.insert(params.text_document.uri.to_string(), new_tree);
+                }
+                Err(_) => {}
+            }
         }
     }
 
@@ -449,7 +465,7 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        use codespan_reporting::files::{Location, SimpleFiles};
+        use codespan_reporting::files::SimpleFiles;
         if let Some(context) = params.context {
             if context.trigger_character.is_none() || context.trigger_character.unwrap() != "." {
                 return Ok(None);
@@ -460,78 +476,66 @@ impl LanguageServer for Backend {
                 .unwrap()
                 .get(&params.text_document_position.text_document.uri.to_string())
             {
-                match self.parser.lock() {
-                    Ok(mut parser) => {
+                let map = self.parse_tree_map.lock().unwrap();
+                let tree = map.get(&params.text_document_position.text_document.uri.to_string());
+                match tree {
+                    Some(tree) => {
                         let start = Instant::now();
+                        let root = tree.root_node();
+                        let dot = params.text_document_position.position;
+                        let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
+                        let mut files = SimpleFiles::new();
+                        let file_id = files.add("test", &document.text);
+                        // this is utf8 based bytes index
+                        let byte_index = position_to_byte_index(
+                            &files,
+                            file_id,
+                            &lsp_types::Position::new(
+                                before_dot.line as u32,
+                                before_dot.character as u32,
+                            ),
+                        )
+                        .unwrap();
+                        let node = root.named_descendant_for_byte_range(byte_index, byte_index);
 
-                        let tree = parser.parse(&document.text, None);
-                        if let Some(tree) = tree {
-                            let duration = start.elapsed();
-
-                            let root = tree.root_node();
-                            let dot = params.text_document_position.position;
-                            let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
-                            let start = Instant::now();
-                            let mut files = SimpleFiles::new();
-                            let file_id = files.add("test", &document.text);
-                            // this is utf8 based bytes index
-                            let byte_index = position_to_byte_index(
-                                &files,
-                                file_id,
-                                &lsp_types::Position::new(
-                                    before_dot.line as u32,
-                                    before_dot.character as u32,
+                        if let Some(mut node) = node {
+                            let end_index = node.end_byte();
+                            while let Some(parent) = node.parent() {
+                                if !node.is_error()
+                                    && parent.kind().contains("expression")
+                                    && parent.end_byte() == end_index
+                                {
+                                    node = parent;
+                                } else {
+                                    break;
+                                }
+                            }
+                            let replace_range = Range::new(
+                                Position::new(
+                                    node.start_position().row as u64,
+                                    node.start_position().column as u64,
                                 ),
-                            )
-                            .unwrap();
-                            debug!("code-lsp: {:?}", start.elapsed());
-                            let node = root.named_descendant_for_byte_range(
-                               byte_index, 
-                               byte_index
+                                Position::new(dot.line, dot.character),
                             );
 
-                            if let Some(mut node) = node {
-                                let end_index = node.end_byte();
-                                while let Some(parent) = node.parent() {
-                                    if !node.is_error()
-                                        && parent.kind().contains("expression")
-                                        && parent.end_byte() == end_index
-                                    {
-                                        node = parent;
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                let replace_range = Range::new(
-                                    Position::new(
-                                        node.start_position().row as u64,
-                                        node.start_position().column as u64,
-                                    ),
-                                    Position::new(dot.line, dot.character),
-                                );
+                            let source_code = &document.text[node.byte_range()];
 
-                                let source_code = &document.text[node.byte_range()];
-
-                                let mut template_item_list = self
-                                    .get_template_completion_item_list(
-                                        source_code.to_string(),
-                                        &replace_range,
-                                    );
-                                template_item_list.extend(self.get_snippet_completion_item_list(
-                                    source_code.to_string(),
-                                    &replace_range,
-                                ));
-                                template_item_list.push(CompletionItem::new_simple(
-                                    format!("{:?}", duration),
-                                    format!("{:?}: {:?}", node, Range::default()),
-                                ));
-                                return Ok(Some(CompletionResponse::Array(template_item_list)));
-                            }
-                        } else {
-                            return Ok(None);
+                            let mut template_item_list = self.get_template_completion_item_list(
+                                source_code.to_string(),
+                                &replace_range,
+                            );
+                            template_item_list.extend(self.get_snippet_completion_item_list(
+                                source_code.to_string(),
+                                &replace_range,
+                            ));
+                            template_item_list.push(CompletionItem::new_simple(
+                                format!("{:?}", start.elapsed()),
+                                format!("{:?}: {:?}", node, Range::default()),
+                            ));
+                            return Ok(Some(CompletionResponse::Array(template_item_list)));
                         }
                     }
-                    Err(_) => {}
+                    _ => {}
                 };
             }
         }

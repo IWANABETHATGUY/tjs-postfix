@@ -12,27 +12,28 @@ fn main() {
     let mut parser = Parser::new();
     parser.set_language(language).unwrap();
     let parser = Arc::new(Mutex::new(parser));
-    let res = read_to_string("test.ts").unwrap();
+    let res = read_to_string("test2.ts").unwrap();
     let mut parser = parser.lock().unwrap();
-    let start = Instant::now();
+    // let start = Instant::now();
     let tree = parser.parse(&res, None).unwrap();
-    println!("{:?}", start.elapsed());
-    parser.set_language(language_typescript).unwrap();
-    let start = Instant::now();
-    let tree = parser.parse(&res, None).unwrap();
-    println!("{:?}", start.elapsed());
+    // println!("{:?}", start.elapsed());
+    // parser.set_language(language_typescript).unwrap();
+    // let start = Instant::now();
+    // let tree = parser.parse(&res, None).unwrap();
+    // println!("{:?}", start.elapsed());
     // for i in 0..10 {
     //     let start = Instant::now();
     //     println!("{:?}", start.elapsed());
     // }
-    // println!("{:?}", tree);
-    // let node = tree.root_node();
-    // pretty_print(&res, node, 0);
+    println!("{:?}", tree);
+    let node = tree.root_node();
+    pretty_print(&res, node, 0);
 }
 
 fn pretty_print(source_code: &str, root: Node, level: usize) {
     if !root.is_named() {
-        println!("{:?}", &source_code[root.start_byte()..root.end_byte()]);
+        return
+        // println!("{:?}", &source_code[root.start_byte()..root.end_byte()]);
     }
     let kind = root.kind();
     let start = root.start_position();
@@ -44,7 +45,7 @@ fn pretty_print(source_code: &str, root: Node, level: usize) {
         start.row,
         start.column,
         end.row,
-        end.column
+        end.column,
     );
     for i in 0..root.child_count() {
         let node = root.child(i).unwrap();
