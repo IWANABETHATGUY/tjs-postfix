@@ -306,7 +306,6 @@ impl LanguageServer for Backend {
                         &lsp_types::Position::new(end.line as u32, end.character as u32),
                     )
                     .unwrap();
-                    debug!("range select: {}", &document.text[start_byte..end_byte]);
                     let start_node = root.named_descendant_for_byte_range(start_byte, start_byte);
                     let end_node = root.named_descendant_for_byte_range(end_byte, end_byte);
                     if start_node.is_none() || end_node.is_none() {
