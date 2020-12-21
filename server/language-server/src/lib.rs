@@ -321,7 +321,7 @@ impl LanguageServer for Backend {
                     match (start_node.parent(), end_node.parent()) {
                         (Some(sp), Some(ep))
                             if sp.kind() == "member_expression"
-                                && ep.kind() == "member_expression" =>
+                                && ep.kind() == "member_expression"=>
                         {
                             let start_object_node = sp.child_by_field_name("object");
                             let end_object_node = ep.child_by_field_name("object");
@@ -449,8 +449,8 @@ impl LanguageServer for Backend {
                 .unwrap();
             let start = Instant::now();
             for change in changes {
-                tree.edit(&get_tree_sitter_edit_from_change(&change, document).unwrap());
-                document.update(vec![change], version);
+                tree.edit(&get_tree_sitter_edit_from_change(&change, document, version).unwrap());
+                // document.update(vec![change], version);
             }
             debug!("incremental updating: {:?}", start.elapsed());
 

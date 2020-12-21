@@ -8,37 +8,40 @@ use tree_sitter::{InputEdit, Node};
 pub fn get_tree_sitter_edit_from_change(
     change: &TextDocumentContentChangeEvent,
     document: &mut FullTextDocument,
+    version: i64
 ) -> Option<InputEdit> {
     if change.range.is_none() || change.range_length.is_none() {
         return None;
     }
     let mut files = SimpleFiles::new();
-    let file_id = files.add("test", &document.text);
+    let before_file_id = files.add("before", document.text.clone());
+    document.update(vec![change.clone()], version);
+    
+    let after_file_id = files.add("after", document.text.clone());
     // this is utf8 based bytes index
     let range = change.range.unwrap();
     let start = range.start;
     let end = range.end;
     let start_byte = position_to_byte_index(
         &files,
-        file_id,
+        before_file_id,
         &lsp_types::Position::new(start.line as u32, start.character as u32),
     )
     .unwrap();
     let old_end_byte = position_to_byte_index(
         &files,
-        file_id,
+        before_file_id,
         &lsp_types::Position::new(end.line as u32, end.character as u32),
     )
     .unwrap();
     let new_end_byte = start_byte + change.text.len();
-
     Some(InputEdit {
         start_byte,
         old_end_byte,
         new_end_byte,
-        start_position: byte_index_to_point(&files, file_id, start_byte).unwrap(),
-        old_end_position: byte_index_to_point(&files, file_id, old_end_byte).unwrap(),
-        new_end_position: byte_index_to_point(&files, file_id, new_end_byte).unwrap(),
+        start_position: byte_index_to_point(&files, before_file_id, start_byte).unwrap(),
+        old_end_position: byte_index_to_point(&files, before_file_id, old_end_byte).unwrap(),
+        new_end_position: byte_index_to_point(&files, after_file_id, new_end_byte).unwrap(),
     })
 }
 
