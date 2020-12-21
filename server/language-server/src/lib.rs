@@ -337,14 +337,12 @@ impl LanguageServer for Backend {
                                     ),
                                 );
                                 let object_source_code = &document.text[start.byte_range()];
-                                let function = &document.text[start_node.start_byte()..end_node.end_byte()];
+                                let function =
+                                    &document.text[start_node.start_byte()..end_node.end_byte()];
 
                                 let replaced_code = format!("{}({})", function, object_source_code);
-                                
-                                let edit = TextEdit::new(
-                                    replace_range,
-                                    replaced_code.clone()
-                                );
+
+                                let edit = TextEdit::new(replace_range, replaced_code.clone());
                                 let mut changes = HashMap::new();
                                 changes.insert(params.text_document.uri, vec![edit]);
                                 code_action.push(CodeActionOrCommand::CodeAction(CodeAction {

@@ -370,10 +370,11 @@ dependencies = [
 
 [[package]]
 name = "lsp-text-document"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "339c9ae1d20020935ea9a75ea5e9e81489bf7986ba41d44163bf7e8273edcbb5"
+version = "0.1.0"
+source = "git+https://github.com/IWANABETHATGUY/lsp-text-document#6fb9285aa941e716fa935829162f9b1514f7bc17"
 dependencies = [
+ "codespan-lsp",
+ "codespan-reporting",
  "lsp-types 0.84.0",
 ]
 
