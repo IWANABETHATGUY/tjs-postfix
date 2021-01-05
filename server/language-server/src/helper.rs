@@ -30,8 +30,8 @@ pub fn get_tree_sitter_edit_from_change(
         &lsp_types::Position::new(end.line as u32, end.character as u32),
     )
     .unwrap();
-    let new_end_byte = start_byte + change.text.len();
-
+    let new_end_byte = start_byte + change.text.chars().fold(0, |acc, cur| acc + cur.len_utf16());
+    
     Some(InputEdit {
         start_byte,
         old_end_byte,
