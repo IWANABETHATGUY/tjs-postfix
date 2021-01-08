@@ -298,14 +298,19 @@ impl LanguageServer for Backend {
                         &files,
                         file_id,
                         &lsp_types::Position::new(start.line as u32, start.character as u32),
-                    )
-                    .unwrap();
+                    );
+
                     let end_byte = position_to_byte_index(
                         &files,
                         file_id,
                         &lsp_types::Position::new(end.line as u32, end.character as u32),
-                    )
-                    .unwrap();
+                    );
+
+                    let (start_byte, end_byte) = match (start_byte, end_byte) {
+                        (Ok(s), Ok(e)) => (s, e),
+                        _ => return Ok(None),
+                    };
+
                     let start_node = root.named_descendant_for_byte_range(start_byte, start_byte);
                     let end_node = root.named_descendant_for_byte_range(end_byte, end_byte);
                     if start_node.is_none() || end_node.is_none() {
@@ -409,6 +414,14 @@ impl LanguageServer for Backend {
             .unwrap()
             .get_mut(&params.text_document.uri.to_string())
         {
+            let mut parser = self.parser.lock().unwrap();
+            let mut parse_tree_map = match self.parse_tree_map.lock() {
+                Ok(map) => map,
+                Err(_) => {
+                    error!("can't hold the parse tree map lock");
+                    return;
+                }
+            };
             let changes: Vec<lsp_types::TextDocumentContentChangeEvent> = params
                 .content_changes
                 .into_iter()
@@ -437,13 +450,7 @@ impl LanguageServer for Backend {
             } else {
                 document.version
             };
-            let mut parse_tree_map = match self.parse_tree_map.lock() {
-                Ok(map) => map,
-                Err(_) => {
-                    error!("can't hold the parse tree map lock");
-                    return;
-                }
-            };
+
             let tree = parse_tree_map
                 .get_mut(&params.text_document.uri.to_string())
                 .unwrap();
@@ -453,14 +460,8 @@ impl LanguageServer for Backend {
                 document.update(vec![change], version);
             }
             debug!("incremental updating: {:?}", start.elapsed());
-
-            match self.parser.lock() {
-                Ok(mut parser) => {
-                    let new_tree = parser.parse(&document.text, Some(tree)).unwrap();
-                    parse_tree_map.insert(params.text_document.uri.to_string(), new_tree);
-                }
-                Err(_) => {}
-            }
+            let new_tree = parser.parse(&document.text, Some(tree)).unwrap();
+            parse_tree_map.insert(params.text_document.uri.to_string(), new_tree);
         }
     }
 
@@ -505,8 +506,12 @@ impl LanguageServer for Backend {
                                 before_dot.line as u32,
                                 before_dot.character as u32,
                             ),
-                        )
-                        .unwrap();
+                        );
+
+                        let byte_index = match byte_index {
+                            Ok(index) => index,
+                            _ => return Ok(None),
+                        };
                         let node = root.named_descendant_for_byte_range(byte_index, byte_index);
 
                         if let Some(mut node) = node {
