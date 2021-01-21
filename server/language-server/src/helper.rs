@@ -3,75 +3,59 @@ use codespan_reporting::files::{Error, Files, SimpleFiles};
 use log::debug;
 use lsp_text_document::FullTextDocument;
 use lsp_types::{Position, TextDocumentContentChangeEvent};
-use tree_sitter::{InputEdit, Node};
+use tree_sitter::{InputEdit, Node, Point};
 
 pub fn get_tree_sitter_edit_from_change(
     change: &TextDocumentContentChangeEvent,
     document: &mut FullTextDocument,
+    version: i64,
 ) -> Option<InputEdit> {
     if change.range.is_none() || change.range_length.is_none() {
         return None;
     }
-    let mut files = SimpleFiles::new();
-    let file_id = files.add("test", &document.text);
+
     // this is utf8 based bytes index
     let range = change.range.unwrap();
     let start = range.start;
     let end = range.end;
-    let start_byte = position_to_byte_index(
-        &files,
-        file_id,
-        &lsp_types::Position::new(start.line as u32, start.character as u32),
-    )
-    .unwrap();
-    let old_end_byte = position_to_byte_index(
-        &files,
-        file_id,
-        &lsp_types::Position::new(end.line as u32, end.character as u32),
-    )
-    .unwrap();
-    let new_end_byte = start_byte + change.text.chars().fold(0, |acc, cur| acc + cur.len_utf16());
-    
+    let start_char = document.rope.line_to_char(start.line as usize) + start.character as usize;
+    let old_end_char = document.rope.line_to_char(end.line as usize) + end.character as usize;
+
+    let start_byte = document.rope.char_to_byte(start_char);
+    let old_end_byte = document.rope.char_to_byte(old_end_char);
+    // let start_byte = document.rope.line
+    // let start_byte = position_to_byte_index(
+    //     &files,
+    //     file_id,
+    //     &lsp_types::Position::new(start.line as u32, start.character as u32),
+    // )
+    // .unwrap();
+    // let old_end_byte = position_to_byte_index(
+    //     &files,
+    //     file_id,
+    //     &lsp_types::Position::new(end.line as u32, end.character as u32),
+    // )
+    // .unwrap();
+    document.update(vec![change.clone()], version);
+    let new_end_char = start_char + change.text.chars().count();
+    let new_end_byte = document.rope.char_to_byte(new_end_char);
+
+    let new_end_line = document.rope.char_to_line(new_end_char);
+    let new_end_line_first_character = document.rope.line_to_char(new_end_line);
+    let new_end_character = new_end_byte - new_end_line_first_character;
     Some(InputEdit {
         start_byte,
         old_end_byte,
         new_end_byte,
-        start_position: byte_index_to_point(&files, file_id, start_byte).unwrap(),
-        old_end_position: byte_index_to_point(&files, file_id, old_end_byte).unwrap(),
-        new_end_position: byte_index_to_point(&files, file_id, new_end_byte).unwrap(),
+        start_position: Point::new(start.line as usize, start.character as usize),
+        old_end_position: Point::new(end.line as usize, end.character as usize),
+        new_end_position: Point::new(new_end_line, new_end_character),
     })
 }
 
-pub fn byte_index_to_point<'a, F>(
-    files: &'a F,
-    file_id: F::FileId,
-    byte_index: usize,
-) -> Result<tree_sitter::Point, Error>
-where
-    F: Files<'a> + ?Sized,
-{
-    // let source = files.source(file_id)?;
-    // let source = source.as_ref();
-
-    let line_index = files.line_index(file_id, byte_index)?;
-    let line_span = files.line_range(file_id, line_index).unwrap();
-
-    // let line_str = source
-    //     .get(line_span.clone())
-    //     .ok_or_else(|| Error::IndexTooLarge {
-    //         given: if line_span.start >= source.len() {
-    //             line_span.start
-    //         } else {
-    //             line_span.end
-    //         },
-    //         max: source.len() - 1,
-    //     })?;
-    let column = byte_index - line_span.start;
-    Ok(tree_sitter::Point::new(line_index, column))
-}
 pub fn pretty_print(source_code: &str, root: Node, level: usize) {
     if !root.is_named() {
-        return
+        return;
         // println!("{:?}", &source_code[root.start_byte()..root.end_byte()]);
     }
     let kind = root.kind();
@@ -91,4 +75,3 @@ pub fn pretty_print(source_code: &str, root: Node, level: usize) {
         pretty_print(source_code, node, level + 1);
     }
 }
-
