@@ -291,25 +291,12 @@ impl LanguageServer for Backend {
                     let start = range.start;
                     let end = range.end;
 
-                    let mut files = SimpleFiles::new();
-                    let file_id = files.add("test", &document.text);
-                    // this is utf8 based bytes index
-                    let start_byte = position_to_byte_index(
-                        &files,
-                        file_id,
-                        &lsp_types::Position::new(start.line as u32, start.character as u32),
-                    );
-
-                    let end_byte = position_to_byte_index(
-                        &files,
-                        file_id,
-                        &lsp_types::Position::new(end.line as u32, end.character as u32),
-                    );
-
-                    let (start_byte, end_byte) = match (start_byte, end_byte) {
-                        (Ok(s), Ok(e)) => (s, e),
-                        _ => return Ok(None),
-                    };
+                    let start_char =
+                        document.rope.line_to_char(start.line as usize) + start.character as usize;
+                    let end_char =
+                        document.rope.line_to_char(end.line as usize) + end.character as usize;
+                    let start_byte = document.rope.char_to_byte(start_char);
+                    let end_byte = document.rope.char_to_byte(end_char);
 
                     let start_node = root.named_descendant_for_byte_range(start_byte, start_byte);
                     let end_node = root.named_descendant_for_byte_range(end_byte, end_byte);
@@ -341,9 +328,10 @@ impl LanguageServer for Backend {
                                         ep.end_position().column as u64,
                                     ),
                                 );
-                                let object_source_code = &document.text[start.byte_range()];
-                                let function =
-                                    &document.text[start_node.start_byte()..end_node.end_byte()];
+                                let object_source_code = &document.rope.to_string()[start.byte_range()];
+
+                                let function = &document.rope.to_string()
+                                    [start_node.start_byte()..end_node.end_byte()];
 
                                 let replaced_code = format!("{}({})", function, object_source_code);
 
@@ -456,11 +444,11 @@ impl LanguageServer for Backend {
                 .unwrap();
             let start = Instant::now();
             for change in changes {
-                tree.edit(&get_tree_sitter_edit_from_change(&change, document).unwrap());
-                document.update(vec![change], version);
+                tree.edit(&get_tree_sitter_edit_from_change(&change, document, version).unwrap());
+                // debug!("{}", document.get_text());
             }
             debug!("incremental updating: {:?}", start.elapsed());
-            let new_tree = parser.parse(&document.text, Some(tree)).unwrap();
+            let new_tree = parser.parse(document.rope.to_string(), Some(tree)).unwrap();
             parse_tree_map.insert(params.text_document.uri.to_string(), new_tree);
         }
     }
@@ -477,7 +465,6 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        use codespan_reporting::files::SimpleFiles;
         if let Some(context) = params.context {
             if context.trigger_character.is_none() || context.trigger_character.unwrap() != "." {
                 return Ok(None);
@@ -496,22 +483,11 @@ impl LanguageServer for Backend {
                         let root = tree.root_node();
                         let dot = params.text_document_position.position;
                         let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
-                        let mut files = SimpleFiles::new();
-                        let file_id = files.add("test", &document.text);
-                        // this is utf8 based bytes index
-                        let byte_index = position_to_byte_index(
-                            &files,
-                            file_id,
-                            &lsp_types::Position::new(
-                                before_dot.line as u32,
-                                before_dot.character as u32,
-                            ),
-                        );
-
-                        let byte_index = match byte_index {
-                            Ok(index) => index,
-                            _ => return Ok(None),
-                        };
+                        // this is based bytes index
+                        // let byte_index_start = document.rope.line_to_byte(before_dot.line as usize);
+                        let char_index = document.rope.line_to_char(before_dot.line as usize)
+                            + before_dot.character as usize;
+                        let byte_index = document.rope.char_to_byte(char_index);
                         let node = root.named_descendant_for_byte_range(byte_index, byte_index);
 
                         if let Some(mut node) = node {
@@ -534,7 +510,7 @@ impl LanguageServer for Backend {
                                 Position::new(dot.line, dot.character),
                             );
 
-                            let source_code = &document.text[node.byte_range()];
+                            let source_code = &document.rope.to_string()[node.byte_range()];
 
                             let mut template_item_list = self.get_template_completion_item_list(
                                 source_code.to_string(),
