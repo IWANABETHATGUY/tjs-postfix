@@ -328,8 +328,9 @@ impl LanguageServer for Backend {
                                         ep.end_position().column as u64,
                                     ),
                                 );
-                                let object_source_code = &document.get_text()[start.byte_range()];
-                                let function = &document.get_text()
+                                let object_source_code = &document.rope.to_string()[start.byte_range()];
+
+                                let function = &document.rope.to_string()
                                     [start_node.start_byte()..end_node.end_byte()];
 
                                 let replaced_code = format!("{}({})", function, object_source_code);
@@ -447,7 +448,7 @@ impl LanguageServer for Backend {
                 // debug!("{}", document.get_text());
             }
             debug!("incremental updating: {:?}", start.elapsed());
-            let new_tree = parser.parse(document.get_text(), Some(tree)).unwrap();
+            let new_tree = parser.parse(document.rope.to_string(), Some(tree)).unwrap();
             parse_tree_map.insert(params.text_document.uri.to_string(), new_tree);
         }
     }
@@ -509,7 +510,7 @@ impl LanguageServer for Backend {
                                 Position::new(dot.line, dot.character),
                             );
 
-                            let source_code = &document.get_text()[node.byte_range()];
+                            let source_code = &document.rope.to_string()[node.byte_range()];
 
                             let mut template_item_list = self.get_template_completion_item_list(
                                 source_code.to_string(),
