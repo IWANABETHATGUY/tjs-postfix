@@ -4,8 +4,6 @@ use std::{
     time::Instant,
 };
 
-use codespan_lsp::position_to_byte_index;
-use codespan_reporting::files::SimpleFiles;
 use helper::{get_tree_sitter_edit_from_change, pretty_print};
 // use helper::get_tree_sitter_edit_from_change;
 use log::{debug, error};
@@ -509,7 +507,6 @@ impl LanguageServer for Backend {
                                 ),
                                 Position::new(dot.line, dot.character),
                             );
-
                             let source_code = &document.rope.to_string()[node.byte_range()];
 
                             let mut template_item_list = self.get_template_completion_item_list(

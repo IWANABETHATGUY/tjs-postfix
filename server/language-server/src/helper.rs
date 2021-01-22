@@ -1,5 +1,3 @@
-use codespan_lsp::{byte_index_to_position, position_to_byte_index};
-use codespan_reporting::files::{Error, Files, SimpleFiles};
 use log::debug;
 use lsp_text_document::FullTextDocument;
 use lsp_types::{Position, TextDocumentContentChangeEvent};
