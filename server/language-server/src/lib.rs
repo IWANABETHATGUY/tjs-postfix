@@ -326,7 +326,8 @@ impl LanguageServer for Backend {
                                         ep.end_position().column as u64,
                                     ),
                                 );
-                                let object_source_code = &document.rope.to_string()[start.byte_range()];
+                                let object_source_code =
+                                    &document.rope.to_string()[start.byte_range()];
 
                                 let function = &document.rope.to_string()
                                     [start_node.start_byte()..end_node.end_byte()];
@@ -463,24 +464,37 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        debug!("completion");
         if let Some(context) = params.context {
-            if context.trigger_character.is_none() || context.trigger_character.unwrap() != "." {
-                return Ok(None);
-            }
             if let Some(document) = self
                 .document_map
                 .lock()
                 .unwrap()
                 .get(&params.text_document_position.text_document.uri.to_string())
             {
+                let pos = params.text_document_position.position.clone();
+                let line = document.rope.line(pos.line as usize);
+
+                // debug!("line: {}, character: {}, context: {}", line.to_string());
+                debug!("line: {}, character: {} ", pos.line, pos.character,);
+                let res = line.slice(..pos.character as usize).to_string();
+                let before_string = res.rfind(".").and_then(|n| Some(&res[n + 1..]));
+                debug!("before_string:{:?}", before_string);
+                if before_string.is_none() {
+                    return Ok(None);
+                }
                 let map = self.parse_tree_map.lock().unwrap();
                 let tree = map.get(&params.text_document_position.text_document.uri.to_string());
                 match tree {
                     Some(tree) => {
+                        let completion_keyword = before_string.unwrap();
                         let start = Instant::now();
                         let root = tree.root_node();
                         let dot = params.text_document_position.position;
-                        let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
+                        let before_dot = Position::new(
+                            dot.line,
+                            dot.character.wrapping_sub(completion_keyword.len() as u64 + 2),
+                        );
                         // this is based bytes index
                         // let byte_index_start = document.rope.line_to_byte(before_dot.line as usize);
                         let char_index = document.rope.line_to_char(before_dot.line as usize)
