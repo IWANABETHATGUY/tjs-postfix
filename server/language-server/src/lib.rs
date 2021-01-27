@@ -464,7 +464,6 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        debug!("completion");
         if let Some(context) = params.context {
             if let Some(document) = self
                 .document_map
@@ -475,11 +474,9 @@ impl LanguageServer for Backend {
                 let pos = params.text_document_position.position.clone();
                 let line = document.rope.line(pos.line as usize);
 
-                // debug!("line: {}, character: {}, context: {}", line.to_string());
-                debug!("line: {}, character: {} ", pos.line, pos.character,);
-                let res = line.slice(..pos.character as usize).to_string();
-                let before_string = res.rfind(".").and_then(|n| Some(&res[n + 1..]));
-                debug!("before_string:{:?}", before_string);
+                let line_text_before_cursor = line.slice(..pos.character as usize).to_string();
+                let before_string = line_text_before_cursor.rfind(".").and_then(|n| Some(&line_text_before_cursor[n + 1..]));
+                // debug!("before_string:{:?}", before_string);
                 if before_string.is_none() {
                     return Ok(None);
                 }
