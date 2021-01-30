@@ -27,7 +27,9 @@ export async function activate(context: ExtensionContext) {
 
   // E:\vscode-extension\github\server\target\debug
 
-  const traceOutputChannel = window.createOutputChannel("Tjs language server trace");
+  const traceOutputChannel = window.createOutputChannel(
+    "Tjs language server trace"
+  );
   const command = "tjs-language-server.exe";
   const run: Executable = {
     command,
@@ -71,6 +73,11 @@ export async function activate(context: ExtensionContext) {
   // Create the language client and start the client.
 
   // Start the client. This will also launch the server
+  client.onReady().then(() => {
+    client.onNotification("tjs-postfix/notification", (...args) => {
+      console.log(args);
+    });
+  });
   client.start();
 }
 
