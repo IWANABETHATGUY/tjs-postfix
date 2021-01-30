@@ -4,13 +4,19 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as path from "path";
-import { workspace, ExtensionContext } from "vscode";
+import { workspace, ExtensionContext, window } from "vscode";
 
-import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind, Executable } from "vscode-languageclient";
+import {
+  LanguageClient,
+  LanguageClientOptions,
+  ServerOptions,
+  TransportKind,
+  Executable,
+} from "vscode-languageclient";
 
 let client: LanguageClient;
 
-export function activate(context: ExtensionContext) {
+export async function activate(context: ExtensionContext) {
   // The server is implemented in node
   // let serverModule = context.asAbsolutePath(
   // 	path.join('server', 'out', 'server.js')
@@ -20,15 +26,19 @@ export function activate(context: ExtensionContext) {
   // let debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] };
 
   // E:\vscode-extension\github\server\target\debug
+  const traceOutputChannel = window.createOutputChannel(
+    "tjs language server trace"
+  );
+
   const command = "tjs-language-server.exe";
   const run: Executable = {
     command,
     options: {
       env: {
         // eslint-disable-next-line @typescript-eslint/naming-convention
-        "RUST_LOG": "debug"
-      }
-    }
+        RUST_LOG: "debug",
+      },
+    },
   };
   const serverOptions: ServerOptions = {
     run,
@@ -49,14 +59,19 @@ export function activate(context: ExtensionContext) {
       // Notify the server about file changes to '.clientrc files contained in the workspace
       fileEvents: workspace.createFileSystemWatcher("**/.clientrc"),
     },
+    traceOutputChannel,
   };
 
   // Create the language client and start the client.
-  client = new LanguageClient("TjsLanguage Server", "TJS Language Server", serverOptions, clientOptions);
+  client = new LanguageClient(
+    "tjs-postfix",
+    "TJS Language Server",
+    serverOptions,
+    clientOptions
+  );
 
   // Start the client. This will also launch the server
   client.start();
-
 }
 
 export function deactivate(): Thenable<void> | undefined {

@@ -21,22 +21,27 @@
     "onLanguage:javascript",
     "onLanguage:vue"
   ],
-  "main": "./dist/extension",
+  "main": "./client/out/extension",
   "contributes": {
     "configuration": {
       "type": "object",
-      "title": "Multi LSP configuration",
+      "title": "Tjs postfix",
       "properties": {
         "tjs-postfix.trace.server": {
-          "scope": "window",
           "type": "string",
+          "scope": "window",
           "enum": [
             "off",
             "messages",
             "verbose"
           ],
+          "enumDescriptions": [
+            "No traces",
+            "Error only",
+            "Full log"
+          ],
           "default": "off",
-          "description": "Traces the communication between VSCode and the language server."
+          "description": "Trace requests to the rust-analyzer (this is usually overly verbose and not recommended for regular users)."
         },
         "tjs-postfix.templateMapList": {
           "type": "array",

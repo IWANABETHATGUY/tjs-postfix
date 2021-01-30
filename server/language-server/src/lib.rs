@@ -1,10 +1,10 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, PoisonError},
+    sync::{Arc, Mutex},
     time::Instant,
 };
 
-use helper::{get_tree_sitter_edit_from_change, pretty_print};
+use helper::get_tree_sitter_edit_from_change;
 // use helper::get_tree_sitter_edit_from_change;
 use log::{debug, error};
 use lsp_text_document::FullTextDocument;
@@ -280,9 +280,8 @@ impl LanguageServer for Backend {
             .get(&params.text_document.uri.to_string())
         {
             let map = self.parse_tree_map.lock().unwrap();
-            let tree = map.get(&params.text_document.uri.to_string());
-            match tree {
-                Some(tree) => {
+            if let Some(tree) = map.get(&params.text_document.uri.to_string()) {
+                {
                     let duration = Instant::now();
                     let root = tree.root_node();
                     let range = params.range;
@@ -326,7 +325,8 @@ impl LanguageServer for Backend {
                                         ep.end_position().column as u64,
                                     ),
                                 );
-                                let object_source_code = &document.rope.to_string()[start.byte_range()];
+                                let object_source_code =
+                                    &document.rope.to_string()[start.byte_range()];
 
                                 let function = &document.rope.to_string()
                                     [start_node.start_byte()..end_node.end_byte()];
@@ -355,7 +355,6 @@ impl LanguageServer for Backend {
                     debug!("code-action: {:?}", duration.elapsed());
                     return Ok(Some(code_action));
                 }
-                _ => {}
             }
         }
         unimplemented!() // TODO

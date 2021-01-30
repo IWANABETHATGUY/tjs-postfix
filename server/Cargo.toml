@@ -4,3 +4,6 @@ members = [
     "language-server",
     "treesitter-ts",
 ]
+
+[profile.dev]
+debug = false
