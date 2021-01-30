@@ -463,23 +463,33 @@ impl LanguageServer for Backend {
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         if let Some(context) = params.context {
-            if context.trigger_character.is_none() || context.trigger_character.unwrap() != "." {
-                return Ok(None);
-            }
             if let Some(document) = self
                 .document_map
                 .lock()
                 .unwrap()
                 .get(&params.text_document_position.text_document.uri.to_string())
             {
+                let pos = params.text_document_position.position.clone();
+                let line = document.rope.line(pos.line as usize);
+
+                let line_text_before_cursor = line.slice(..pos.character as usize).to_string();
+                let before_string = line_text_before_cursor.rfind(".").and_then(|n| Some(&line_text_before_cursor[n + 1..]));
+                // debug!("before_string:{:?}", before_string);
+                if before_string.is_none() {
+                    return Ok(None);
+                }
                 let map = self.parse_tree_map.lock().unwrap();
                 let tree = map.get(&params.text_document_position.text_document.uri.to_string());
                 match tree {
                     Some(tree) => {
+                        let completion_keyword = before_string.unwrap();
                         let start = Instant::now();
                         let root = tree.root_node();
                         let dot = params.text_document_position.position;
-                        let before_dot = Position::new(dot.line, dot.character.wrapping_sub(2));
+                        let before_dot = Position::new(
+                            dot.line,
+                            dot.character.wrapping_sub(completion_keyword.len() as u64 + 2),
+                        );
                         // this is based bytes index
                         // let byte_index_start = document.rope.line_to_byte(before_dot.line as usize);
                         let char_index = document.rope.line_to_char(before_dot.line as usize)

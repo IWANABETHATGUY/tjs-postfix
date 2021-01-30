@@ -7,12 +7,12 @@ import * as path from "path";
 import { workspace, ExtensionContext, window } from "vscode";
 
 import {
+  Executable,
   LanguageClient,
   LanguageClientOptions,
   ServerOptions,
   TransportKind,
-  Executable,
-} from "vscode-languageclient";
+} from "vscode-languageclient/node";
 
 let client: LanguageClient;
 
@@ -26,10 +26,8 @@ export async function activate(context: ExtensionContext) {
   // let debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] };
 
   // E:\vscode-extension\github\server\target\debug
-  const traceOutputChannel = window.createOutputChannel(
-    "tjs language server trace"
-  );
 
+  const traceOutputChannel = window.createOutputChannel("Tjs language server trace");
   const command = "tjs-language-server.exe";
   const run: Executable = {
     command,
@@ -69,6 +67,8 @@ export async function activate(context: ExtensionContext) {
     serverOptions,
     clientOptions
   );
+
+  // Create the language client and start the client.
 
   // Start the client. This will also launch the server
   client.start();
