@@ -1,6 +1,7 @@
 use std::{collections::HashMap, time::Instant};
 
-use helper::get_tree_sitter_edit_from_change;
+pub use backend::TreeWrapper;
+use helper::{get_tree_sitter_edit_from_change, pretty_print};
 // use helper::get_tree_sitter_edit_from_change;
 use log::{debug, error};
 use lsp_text_document::FullTextDocument;
@@ -251,14 +252,23 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn did_save(&self, _: DidSaveTextDocumentParams) {
-        self.client
-            .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
-                "hi", "there",
-            )).await;
-        // self.client
-        //     .log_message(MessageType::Info, "file saved!")
-        //     .await;
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        let start = Instant::now();
+        let path = params.text_document.uri.to_string();
+        let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().unwrap().get(&path) {
+            Some((path, format!("{}", TreeWrapper(tree.clone(),))))
+        } else {
+            None
+        };
+        if let Some((path, ast_string)) = path_ast_tuple {
+            self.client
+                .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
+                    path, ast_string,
+                ))
+                .await;
+        }
+
+        debug!("{:?}", start.elapsed());
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
