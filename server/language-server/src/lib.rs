@@ -7,9 +7,9 @@ use log::{debug, error};
 use lsp_text_document::FullTextDocument;
 use notification::{CustomNotification, CustomNotificationParams};
 use serde_json::Value;
-use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::LanguageServer;
+use tower_lsp::{jsonrpc::Result, PathParams};
 
 mod backend;
 mod helper;
@@ -174,6 +174,23 @@ impl LanguageServer for Backend {
         // }
 
         Ok(None)
+    }
+
+    async fn ast_preview(&self, params: PathParams) -> Result<()> {
+        let path = params.path;
+        let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().unwrap().get(&path) {
+            Some((path, format!("{}", TreeWrapper(tree.clone(),))))
+        } else {
+            None
+        };
+        if let Some((path, ast_string)) = path_ast_tuple {
+            self.client
+                .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
+                    path, ast_string,
+                ))
+                .await;
+        }
+        Ok(())
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
