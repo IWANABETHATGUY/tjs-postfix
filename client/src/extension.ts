@@ -4,7 +4,14 @@
  * ------------------------------------------------------------------------------------------ */
 
 import * as path from "path";
-import { workspace, ExtensionContext, window } from "vscode";
+import {
+  workspace,
+  ExtensionContext,
+  window,
+  commands,
+  ViewColumn,
+  WebviewPanel,
+} from "vscode";
 
 import {
   Executable,
@@ -26,8 +33,40 @@ export async function activate(context: ExtensionContext) {
   // let debugOptions = { execArgv: ['--nolazy', '--inspect=6009'] };
 
   // E:\vscode-extension\github\server\target\debug
+  let currentPanel: WebviewPanel | undefined = undefined;
+  context.subscriptions.push(
+    commands.registerCommand("tjs-postfix.ast-preview", () => {
+      const columnToShowIn = window.activeTextEditor
+        ? window.activeTextEditor.viewColumn
+        : undefined;
 
-  const traceOutputChannel = window.createOutputChannel("Tjs language server trace");
+      if (currentPanel) {
+        // If we already have a panel, show it in the target column
+        currentPanel.reveal(columnToShowIn);
+      } else {
+        // Create and show a new webview
+        currentPanel = window.createWebviewPanel(
+          "tjs-postfix.ast-preview", // Identifies the type of the webview. Used internally
+          "ast-preview", // Title of the panel displayed to the user
+          ViewColumn.Two, // Editor column to show the new webview panel in.
+          {} // Webview options. More on these later.
+        );
+        // client.sendRequest("tjs-postfix/ast-preview", {
+        //   path: window.activeTextEditor.document.uri.toString(),
+        // });
+      }
+      currentPanel.onDidDispose(
+        () => {
+          currentPanel = undefined;
+        },
+        null,
+        context.subscriptions
+      );
+    })
+  );
+  const traceOutputChannel = window.createOutputChannel(
+    "Tjs language server trace"
+  );
   const command = "tjs-language-server.exe";
   const run: Executable = {
     command,
@@ -71,6 +110,15 @@ export async function activate(context: ExtensionContext) {
   // Create the language client and start the client.
 
   // Start the client. This will also launch the server
+  client.onReady().then(() => {
+    client.onNotification("tjs-postfix/notification", (...args) => {
+      if (args[0] && currentPanel) {
+        const { message: astString, title: path } = args[0];
+        currentPanel.webview.html = getWebContent(path, astString);
+      }
+    });
+  });
+
   client.start();
 }
 
@@ -79,4 +127,11 @@ export function deactivate(): Thenable<void> | undefined {
     return undefined;
   }
   return client.stop();
+}
+
+function getWebContent(path: string, astString: string): string {
+  return `
+    <h2>${path}</h2>
+    <pre>${astString}</pre>
+  `;
 }
