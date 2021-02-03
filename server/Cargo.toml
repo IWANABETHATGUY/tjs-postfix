@@ -1,5 +1,5 @@
 [workspace]
-members = ["language-server", "treesitter-ts"]
+members = ["language-server", "treesitter-ts", "tower-lsp"]
 
 [profile.dev]
 debug = false
