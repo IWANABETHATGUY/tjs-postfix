@@ -51,9 +51,9 @@ export async function activate(context: ExtensionContext) {
           ViewColumn.Two, // Editor column to show the new webview panel in.
           {} // Webview options. More on these later.
         );
-        // client.sendRequest("tjs-postfix/ast-preview", {
-        //   path: window.activeTextEditor.document.uri.toString(),
-        // });
+        client.sendRequest("tjs-postfix/ast-preview", {
+          path: window.activeTextEditor.document.uri.toString(),
+        });
       }
       currentPanel.onDidDispose(
         () => {
