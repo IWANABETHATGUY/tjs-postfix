@@ -1,6 +1,6 @@
 # tjs-potfix README
 
-## TODO
+## support postfix
 - [x] .if	if (expr)
 - [x] .for	for (let i = 0; i < expr.Length; i++)
 - [x] .forof	for (let item of expr)
@@ -16,3 +16,9 @@
 - [x] .cast	(\<SomeType\>expr)
 - [x] .castas	(expr as SomeType)
 - [x] .new	new expr()
+
+## feature
+1. postfix
+[postfix](https://raw.githubusercontent.com/IWANABETHATGUY/tjs-postfix/master/assets/postfix.gif)
+3. codeAction
+[codeAction](https://raw.githubusercontent.com/IWANABETHATGUY/tjs-postfix/master/assets/codeAction.gif)
