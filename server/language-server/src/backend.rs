@@ -4,7 +4,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
-use tower_lsp::{lsp_types::*, Client};
+use lspower::{lsp::*, Client};
 use tree_sitter::{Node, Parser, Tree};
 
 #[derive(Serialize, Deserialize, Debug)]

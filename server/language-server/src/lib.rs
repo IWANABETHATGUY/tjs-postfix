@@ -5,18 +5,18 @@ use helper::{get_tree_sitter_edit_from_change, pretty_print};
 // use helper::get_tree_sitter_edit_from_change;
 use log::{debug, error};
 use lsp_text_document::FullTextDocument;
-use notification::{CustomNotification, CustomNotificationParams};
+use lspower::jsonrpc::Result;
+use lspower::lsp::*;
+use lspower::LanguageServer;
+// use notification::{CustomNotification, CustomNotificationParams};
 use serde_json::Value;
-use tower_lsp::lsp_types::*;
-use tower_lsp::LanguageServer;
-use tower_lsp::{jsonrpc::Result, PathParams};
 
 mod backend;
 mod helper;
 mod notification;
 pub use backend::Backend;
 
-#[tower_lsp::async_trait]
+#[lspower::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
@@ -29,15 +29,15 @@ impl LanguageServer for Backend {
                     resolve_provider: Some(false),
                     trigger_characters: Some(vec![".".to_string()]),
                     work_done_progress_options: Default::default(),
+                    all_commit_characters: None,
                 }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
-                workspace: Some(WorkspaceCapability {
-                    workspace_folders: Some(WorkspaceFolderCapability {
+                workspace: Some(WorkspaceServerCapabilities {
+                    workspace_folders: Some(WorkspaceFoldersServerCapabilities {
                         supported: Some(true),
-                        change_notifications: Some(
-                            WorkspaceFolderCapabilityChangeNotifications::Bool(true),
-                        ),
+                        change_notifications: Some(OneOf::Left(true)),
                     }),
+                    file_operations: None,
                 }),
                 ..ServerCapabilities::default()
             },
@@ -119,12 +119,12 @@ impl LanguageServer for Backend {
                             if let (Some(start), Some(end)) = (start_object_node, end_object_node) {
                                 let replace_range = Range::new(
                                     Position::new(
-                                        ep.start_position().row as u64,
-                                        ep.start_position().column as u64,
+                                        ep.start_position().row as u32,
+                                        ep.start_position().column as u32,
                                     ),
                                     Position::new(
-                                        ep.end_position().row as u64,
-                                        ep.end_position().column as u64,
+                                        ep.end_position().row as u32,
+                                        ep.end_position().column as u32,
                                     ),
                                 );
                                 let object_source_code =
@@ -145,6 +145,8 @@ impl LanguageServer for Backend {
                                     edit: Some(WorkspaceEdit::new(changes)),
                                     command: None,
                                     is_preferred: Some(false),
+                                    disabled: None,
+                                    data: None,
                                 }));
                             } else {
                                 return Ok(None);
@@ -176,22 +178,22 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
-    async fn ast_preview(&self, params: PathParams) -> Result<()> {
-        let path = params.path;
-        let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().unwrap().get(&path) {
-            Some((path, format!("{}", TreeWrapper(tree.clone(),))))
-        } else {
-            None
-        };
-        if let Some((path, ast_string)) = path_ast_tuple {
-            self.client
-                .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
-                    path, ast_string,
-                ))
-                .await;
-        }
-        Ok(())
-    }
+    // async fn ast_preview(&self, params: PathParams) -> Result<()> {
+    //     let path = params.path;
+    //     let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().unwrap().get(&path) {
+    //         Some((path, format!("{}", TreeWrapper(tree.clone(),))))
+    //     } else {
+    //         None
+    //     };
+    //     if let Some((path, ast_string)) = path_ast_tuple {
+    //         self.client
+    //             .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
+    //                 path, ast_string,
+    //             ))
+    //             .await;
+    //     }
+    //     Ok(())
+    // }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let TextDocumentItem {
@@ -207,7 +209,7 @@ impl LanguageServer for Backend {
             .insert(uri.to_string(), tree);
         self.document_map.lock().unwrap().insert(
             uri.to_string(),
-            FullTextDocument::new(uri, language_id, version, text),
+            FullTextDocument::new(uri, language_id, version as i64, text),
         );
     }
 
@@ -249,18 +251,14 @@ impl LanguageServer for Backend {
                     }
                 })
                 .collect();
-            let version = if let Some(version) = params.text_document.version {
-                version
-            } else {
-                document.version
-            };
+            let version =params.text_document.version;
 
             let tree = parse_tree_map
                 .get_mut(&params.text_document.uri.to_string())
                 .unwrap();
             let start = Instant::now();
             for change in changes {
-                tree.edit(&get_tree_sitter_edit_from_change(&change, document, version).unwrap());
+                tree.edit(&get_tree_sitter_edit_from_change(&change, document, version as i64).unwrap());
                 // debug!("{}", document.get_text());
             }
             debug!("incremental updating: {:?}", start.elapsed());
@@ -277,13 +275,13 @@ impl LanguageServer for Backend {
         } else {
             None
         };
-        if let Some((path, ast_string)) = path_ast_tuple {
-            self.client
-                .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
-                    path, ast_string,
-                ))
-                .await;
-        }
+        // if let Some((path, ast_string)) = path_ast_tuple {
+        //     self.client
+        //         .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
+        //             path, ast_string,
+        //         ))
+        //         .await;
+        // }
 
         debug!("{:?}", start.elapsed());
     }
@@ -323,7 +321,7 @@ impl LanguageServer for Backend {
                         let before_dot = Position::new(
                             dot.line,
                             dot.character
-                                .wrapping_sub(completion_keyword.len() as u64 + 2),
+                                .wrapping_sub(completion_keyword.len() as u32 + 2),
                         );
                         // this is based bytes index
                         // let byte_index_start = document.rope.line_to_byte(before_dot.line as usize);
@@ -346,8 +344,8 @@ impl LanguageServer for Backend {
                             }
                             let replace_range = Range::new(
                                 Position::new(
-                                    node.start_position().row as u64,
-                                    node.start_position().column as u64,
+                                    node.start_position().row as u32,
+                                    node.start_position().column as u32,
                                 ),
                                 Position::new(dot.line, dot.character),
                             );

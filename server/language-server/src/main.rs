@@ -3,8 +3,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use lspower::{jsonrpc::Result, lsp::*, Client, LanguageServer, LspService, Server};
 use tjs_language_server::Backend;
-use tower_lsp::{LspService, Server};
+
 use treesitter_ts::tree_sitter_tsx;
 #[tokio::main]
 async fn main() {
@@ -32,4 +33,8 @@ async fn main() {
         .interleave(messages)
         .serve(service)
         .await;
+    // Server::new(stdin, stdout)
+    //     .interleave(messages)
+    //     .serve(service)
+    //     .await;
 }
