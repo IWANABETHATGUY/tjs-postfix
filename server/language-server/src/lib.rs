@@ -1,220 +1,22 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::{collections::HashMap, time::Instant};
 
-use helper::get_tree_sitter_edit_from_change;
+pub use backend::TreeWrapper;
+use helper::{get_tree_sitter_edit_from_change, pretty_print};
 // use helper::get_tree_sitter_edit_from_change;
 use log::{debug, error};
 use lsp_text_document::FullTextDocument;
-use serde::{Deserialize, Serialize};
+use lspower::jsonrpc::Result;
+use lspower::lsp::*;
+use lspower::LanguageServer;
+// use notification::{CustomNotification, CustomNotificationParams};
 use serde_json::Value;
-use tower_lsp::jsonrpc::Result;
-use tower_lsp::lsp_types::*;
-use tower_lsp::{Client, LanguageServer};
-use tree_sitter::{Parser, Tree};
+
+mod backend;
 mod helper;
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PostfixTemplate {
-    snippetKey: String,
-    functionName: String,
-}
+mod notification;
+pub use backend::Backend;
 
-pub struct SnippetCompletionItem {
-    label: String,
-    detail: String,
-    replace_string_generator: Box<dyn Fn(String) -> String>,
-}
-pub struct Backend {
-    client: Client,
-    document_map: Arc<Mutex<HashMap<String, FullTextDocument>>>,
-    parser: Arc<Mutex<Parser>>,
-    parse_tree_map: Arc<Mutex<HashMap<String, Tree>>>,
-    postfix_template_list: Arc<Mutex<Vec<PostfixTemplate>>>,
-}
-impl Backend {
-    pub fn new(
-        client: Client,
-        document_map: Arc<Mutex<HashMap<String, FullTextDocument>>>,
-        parser: Arc<Mutex<Parser>>,
-        postfix_template_list: Arc<Mutex<Vec<PostfixTemplate>>>,
-        parse_tree_map: Arc<Mutex<HashMap<String, Tree>>>,
-    ) -> Self {
-        Self {
-            client,
-            document_map,
-            parser,
-            postfix_template_list,
-            parse_tree_map,
-        }
-    }
-
-    async fn reset_templates(&self) {
-        let configuration = self
-            .client
-            .configuration(vec![ConfigurationItem {
-                scope_uri: None,
-                section: Some("tjs-postfix.templateMapList".into()),
-            }])
-            .await;
-        if let Ok(mut configuration) = configuration {
-            if let Ok(configuration) = serde_json::from_value::<Vec<PostfixTemplate>>(
-                configuration.first_mut().unwrap().take(),
-            ) {
-                match self.postfix_template_list.lock() {
-                    Ok(mut list) => {
-                        list.clear();
-                        list.extend(configuration);
-                    }
-                    Err(_) => {}
-                }
-            }
-        }
-    }
-
-    fn get_template_completion_item_list(
-        &self,
-        source_code: String,
-        replace_range: &Range,
-    ) -> Vec<CompletionItem> {
-        if let Ok(template_list) = self.postfix_template_list.lock() {
-            template_list
-                .iter()
-                .map(|template_item| {
-                    let mut item = CompletionItem::new_simple(
-                        template_item.snippetKey.clone(),
-                        template_item.functionName.clone(),
-                    );
-                    item.kind = Some(CompletionItemKind::Snippet);
-                    let replace_string =
-                        format!("{}({})", &template_item.functionName, source_code);
-                    item.documentation = Some(Documentation::String(replace_string.clone()));
-                    item.insert_text = Some(replace_string);
-                    item.additional_text_edits =
-                        Some(vec![TextEdit::new(replace_range.clone(), "".into())]);
-                    item
-                })
-                .collect()
-        } else {
-            vec![]
-        }
-    }
-
-    fn get_snippet_completion_item_list(
-        &self,
-        source_code: String,
-        replace_range: &Range,
-    ) -> Vec<CompletionItem> {
-        let snippet_list = vec![
-            SnippetCompletionItem {
-                label: String::from("not"),
-                detail: String::from("revert a variable or expression"),
-                replace_string_generator: Box::new(|name| format!("!{}", name)),
-            },
-            SnippetCompletionItem {
-                label: String::from("if"),
-                detail: String::from("if (expr)"),
-                replace_string_generator: Box::new(|name| {
-                    format!(
-                        r#"if ({}) {{
-    ${{0}}
-}}"#,
-                        name
-                    )
-                }),
-            },
-            SnippetCompletionItem {
-                label: String::from("var"),
-                detail: String::from("var name = expr"),
-                replace_string_generator: Box::new(|name| format!("var ${{0}} = {}", name)),
-            },
-            SnippetCompletionItem {
-                label: String::from("let"),
-                detail: String::from("let name = expr"),
-                replace_string_generator: Box::new(|name| format!("let ${{0}} = {}", name)),
-            },
-            SnippetCompletionItem {
-                label: String::from("const"),
-                detail: String::from("const name = expr"),
-                replace_string_generator: Box::new(|name| format!("const ${{0}} = {}", name)),
-            },
-            SnippetCompletionItem {
-                label: String::from("cast"),
-                detail: String::from("(<name>expr)"),
-                replace_string_generator: Box::new(|name| format!("(<${{0}}>{})", name)),
-            },
-            SnippetCompletionItem {
-                label: String::from("as"),
-                detail: String::from("(expr as name)"),
-                replace_string_generator: Box::new(|name| format!("({} as ${{0}})", name)),
-            },
-            SnippetCompletionItem {
-                label: String::from("new"),
-                detail: String::from("new expr()"),
-                replace_string_generator: Box::new(|name| format!("new {}()", name)),
-            },
-            SnippetCompletionItem {
-                label: String::from("return"),
-                detail: String::from("return expr"),
-                replace_string_generator: Box::new(|name| format!("return {}", name)),
-            },
-            // foreach
-            SnippetCompletionItem {
-                label: String::from("for"),
-                detail: String::from("forloop"),
-                replace_string_generator: Box::new(|name| {
-                    format!(
-                        r#"for (let ${{1:i}} = 0, len = {}.length; ${{1:i}} < len; ${{1:i}}++) {{
-  ${{0}}
-}}"#,
-                        name
-                    )
-                }),
-            },
-            SnippetCompletionItem {
-                label: String::from("forof"),
-                detail: String::from("forof"),
-                replace_string_generator: Box::new(|name| {
-                    format!(
-                        r#"for (let ${{1:item}} of {}) {{
-  ${{0}}
-}}"#,
-                        name
-                    )
-                }),
-            },
-            SnippetCompletionItem {
-                label: String::from("foreach"),
-                detail: String::from("expr.forEach(item => )"),
-                replace_string_generator: Box::new(|name| {
-                    format!(
-                        r#"{}.forEach(${{1:item}} => {{
-    ${{0}}
-}})"#,
-                        name
-                    )
-                }),
-            },
-        ];
-        snippet_list
-            .into_iter()
-            .map(|snippet| {
-                let mut item = CompletionItem::new_simple(snippet.label, snippet.detail);
-                item.insert_text_format = Some(InsertTextFormat::Snippet);
-                item.kind = Some(CompletionItemKind::Snippet);
-                let replace_string = (snippet.replace_string_generator)(source_code.clone());
-                item.documentation = Some(Documentation::String(replace_string.clone()));
-
-                item.insert_text = Some(replace_string);
-                item.additional_text_edits =
-                    Some(vec![TextEdit::new(replace_range.clone(), "".into())]);
-                item
-            })
-            .collect()
-    }
-}
-#[tower_lsp::async_trait]
+#[lspower::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
@@ -227,15 +29,15 @@ impl LanguageServer for Backend {
                     resolve_provider: Some(false),
                     trigger_characters: Some(vec![".".to_string()]),
                     work_done_progress_options: Default::default(),
+                    all_commit_characters: None,
                 }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
-                workspace: Some(WorkspaceCapability {
-                    workspace_folders: Some(WorkspaceFolderCapability {
+                workspace: Some(WorkspaceServerCapabilities {
+                    workspace_folders: Some(WorkspaceFoldersServerCapabilities {
                         supported: Some(true),
-                        change_notifications: Some(
-                            WorkspaceFolderCapabilityChangeNotifications::Bool(true),
-                        ),
+                        change_notifications: Some(OneOf::Left(true)),
                     }),
+                    file_operations: None,
                 }),
                 ..ServerCapabilities::default()
             },
@@ -317,12 +119,12 @@ impl LanguageServer for Backend {
                             if let (Some(start), Some(end)) = (start_object_node, end_object_node) {
                                 let replace_range = Range::new(
                                     Position::new(
-                                        ep.start_position().row as u64,
-                                        ep.start_position().column as u64,
+                                        ep.start_position().row as u32,
+                                        ep.start_position().column as u32,
                                     ),
                                     Position::new(
-                                        ep.end_position().row as u64,
-                                        ep.end_position().column as u64,
+                                        ep.end_position().row as u32,
+                                        ep.end_position().column as u32,
                                     ),
                                 );
                                 let object_source_code =
@@ -343,6 +145,8 @@ impl LanguageServer for Backend {
                                     edit: Some(WorkspaceEdit::new(changes)),
                                     command: None,
                                     is_preferred: Some(false),
+                                    disabled: None,
+                                    data: None,
                                 }));
                             } else {
                                 return Ok(None);
@@ -374,6 +178,23 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
+    // async fn ast_preview(&self, params: PathParams) -> Result<()> {
+    //     let path = params.path;
+    //     let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().unwrap().get(&path) {
+    //         Some((path, format!("{}", TreeWrapper(tree.clone(),))))
+    //     } else {
+    //         None
+    //     };
+    //     if let Some((path, ast_string)) = path_ast_tuple {
+    //         self.client
+    //             .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
+    //                 path, ast_string,
+    //             ))
+    //             .await;
+    //     }
+    //     Ok(())
+    // }
+
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let TextDocumentItem {
             uri,
@@ -388,7 +209,7 @@ impl LanguageServer for Backend {
             .insert(uri.to_string(), tree);
         self.document_map.lock().unwrap().insert(
             uri.to_string(),
-            FullTextDocument::new(uri, language_id, version, text),
+            FullTextDocument::new(uri, language_id, version as i64, text),
         );
     }
 
@@ -430,18 +251,14 @@ impl LanguageServer for Backend {
                     }
                 })
                 .collect();
-            let version = if let Some(version) = params.text_document.version {
-                version
-            } else {
-                document.version
-            };
+            let version =params.text_document.version;
 
             let tree = parse_tree_map
                 .get_mut(&params.text_document.uri.to_string())
                 .unwrap();
             let start = Instant::now();
             for change in changes {
-                tree.edit(&get_tree_sitter_edit_from_change(&change, document, version).unwrap());
+                tree.edit(&get_tree_sitter_edit_from_change(&change, document, version as i64).unwrap());
                 // debug!("{}", document.get_text());
             }
             debug!("incremental updating: {:?}", start.elapsed());
@@ -450,10 +267,23 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn did_save(&self, _: DidSaveTextDocumentParams) {
-        self.client
-            .log_message(MessageType::Info, "file saved!")
-            .await;
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        let start = Instant::now();
+        let path = params.text_document.uri.to_string();
+        let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().unwrap().get(&path) {
+            Some((path, format!("{}", TreeWrapper(tree.clone(),))))
+        } else {
+            None
+        };
+        // if let Some((path, ast_string)) = path_ast_tuple {
+        //     self.client
+        //         .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
+        //             path, ast_string,
+        //         ))
+        //         .await;
+        // }
+
+        debug!("{:?}", start.elapsed());
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
@@ -473,7 +303,9 @@ impl LanguageServer for Backend {
                 let line = document.rope.line(pos.line as usize);
 
                 let line_text_before_cursor = line.slice(..pos.character as usize).to_string();
-                let before_string = line_text_before_cursor.rfind(".").and_then(|n| Some(&line_text_before_cursor[n + 1..]));
+                let before_string = line_text_before_cursor
+                    .rfind(".")
+                    .and_then(|n| Some(&line_text_before_cursor[n + 1..]));
                 // debug!("before_string:{:?}", before_string);
                 if before_string.is_none() {
                     return Ok(None);
@@ -488,7 +320,8 @@ impl LanguageServer for Backend {
                         let dot = params.text_document_position.position;
                         let before_dot = Position::new(
                             dot.line,
-                            dot.character.wrapping_sub(completion_keyword.len() as u64 + 2),
+                            dot.character
+                                .wrapping_sub(completion_keyword.len() as u32 + 2),
                         );
                         // this is based bytes index
                         // let byte_index_start = document.rope.line_to_byte(before_dot.line as usize);
@@ -511,8 +344,8 @@ impl LanguageServer for Backend {
                             }
                             let replace_range = Range::new(
                                 Position::new(
-                                    node.start_position().row as u64,
-                                    node.start_position().column as u64,
+                                    node.start_position().row as u32,
+                                    node.start_position().column as u32,
                                 ),
                                 Position::new(dot.line, dot.character),
                             );

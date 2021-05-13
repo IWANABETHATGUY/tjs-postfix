@@ -23,6 +23,13 @@
   ],
   "main": "./client/out/extension",
   "contributes": {
+    "commands": [
+      {
+        "command": "tjs-postfix.ast-preview",
+        "title": "preview current active editor ast",
+        "category": "tjs-postfix"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "tjs-postfix",
