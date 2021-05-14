@@ -5,10 +5,11 @@ use helper::{get_tree_sitter_edit_from_change, pretty_print};
 // use helper::get_tree_sitter_edit_from_change;
 use log::{debug, error};
 use lsp_text_document::FullTextDocument;
+use lspower::jsonrpc;
 use lspower::jsonrpc::Result;
 use lspower::lsp::*;
 use lspower::LanguageServer;
-// use notification::{CustomNotification, CustomNotificationParams};
+use notification::{AstPreviewRequestParams, CustomNotification, CustomNotificationParams};
 use serde_json::Value;
 
 mod backend;
@@ -31,6 +32,10 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                 }),
+                execute_command_provider: Some(ExecuteCommandOptions {
+                    commands: vec![],
+                    work_done_progress_options: Default::default(),
+                }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 workspace: Some(WorkspaceServerCapabilities {
                     workspace_folders: Some(WorkspaceFoldersServerCapabilities {
@@ -43,7 +48,6 @@ impl LanguageServer for Backend {
             },
         })
     }
-
     async fn initialized(&self, _: InitializedParams) {
         self.reset_templates().await;
         self.client
@@ -51,8 +55,34 @@ impl LanguageServer for Backend {
             .await;
     }
 
-    async fn shutdown(&self) -> Result<()> {
+    async fn shutdown(&self) -> jsonrpc::Result<()> {
         Ok(())
+    }
+
+    async fn request_else(
+        &self,
+        method: &str,
+        _params: Option<serde_json::Value>,
+    ) -> jsonrpc::Result<Option<serde_json::Value>> {
+        if method == "tjs-postfix/ast-preview" {
+            if let Some(params) = _params {
+                let param = serde_json::from_value::<AstPreviewRequestParams>(params).unwrap();
+                let path_ast_tuple =
+                    if let Some(tree) = self.parse_tree_map.lock().unwrap().get(&param.path) {
+                        Some((param.path, format!("{}", TreeWrapper(tree.clone(),))))
+                    } else {
+                        None
+                    };
+                if let Some((path, ast_string)) = path_ast_tuple {
+                    self.client
+                        .send_custom_notification::<CustomNotification>(
+                            CustomNotificationParams::new(path, ast_string),
+                        )
+                        .await;
+                }
+            }
+        }
+        Ok(None)
     }
 
     async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
@@ -169,31 +199,8 @@ impl LanguageServer for Backend {
             .log_message(MessageType::Info, "command executed!")
             .await;
 
-        // match self.client.apply_edit(WorkspaceEdit::default()).await {
-        //     Ok(res) if res.applied => self.client.log_message(MessageType::Info, "applied").await,
-        //     Ok(_) => self.client.log_message(MessageType::Info, "rejected").await,
-        //     Err(err) => self.client.log_message(MessageType::Error, err).await,
-        // }
-
         Ok(None)
     }
-
-    // async fn ast_preview(&self, params: PathParams) -> Result<()> {
-    //     let path = params.path;
-    //     let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().unwrap().get(&path) {
-    //         Some((path, format!("{}", TreeWrapper(tree.clone(),))))
-    //     } else {
-    //         None
-    //     };
-    //     if let Some((path, ast_string)) = path_ast_tuple {
-    //         self.client
-    //             .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
-    //                 path, ast_string,
-    //             ))
-    //             .await;
-    //     }
-    //     Ok(())
-    // }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let TextDocumentItem {
@@ -251,15 +258,16 @@ impl LanguageServer for Backend {
                     }
                 })
                 .collect();
-            let version =params.text_document.version;
+            let version = params.text_document.version;
 
             let tree = parse_tree_map
                 .get_mut(&params.text_document.uri.to_string())
                 .unwrap();
             let start = Instant::now();
             for change in changes {
-                tree.edit(&get_tree_sitter_edit_from_change(&change, document, version as i64).unwrap());
-                // debug!("{}", document.get_text());
+                tree.edit(
+                    &get_tree_sitter_edit_from_change(&change, document, version as i64).unwrap(),
+                );
             }
             debug!("incremental updating: {:?}", start.elapsed());
             let new_tree = parser.parse(document.rope.to_string(), Some(tree)).unwrap();
@@ -275,13 +283,13 @@ impl LanguageServer for Backend {
         } else {
             None
         };
-        // if let Some((path, ast_string)) = path_ast_tuple {
-        //     self.client
-        //         .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
-        //             path, ast_string,
-        //         ))
-        //         .await;
-        // }
+        if let Some((path, ast_string)) = path_ast_tuple {
+            self.client
+                .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
+                    path, ast_string,
+                ))
+                .await;
+        }
 
         debug!("{:?}", start.elapsed());
     }

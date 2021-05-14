@@ -51,7 +51,7 @@ export async function activate(context: ExtensionContext) {
           ViewColumn.Two, // Editor column to show the new webview panel in.
           {} // Webview options. More on these later.
         );
-        client.sendRequest("tjs-postfix/ast-preview", {
+        client.sendRequest('tjs-postfix/ast-preview', {
           path: window.activeTextEditor.document.uri.toString(),
         });
       }
@@ -112,6 +112,7 @@ export async function activate(context: ExtensionContext) {
   // Start the client. This will also launch the server
   client.onReady().then(() => {
     client.onNotification("tjs-postfix/notification", (...args) => {
+      console.log(...args);
       if (args[0] && currentPanel) {
         const { message: astString, title: path } = args[0];
         currentPanel.webview.html = getWebContent(path, astString);
