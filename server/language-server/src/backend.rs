@@ -1,10 +1,10 @@
 use lsp_text_document::FullTextDocument;
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
 use lspower::{lsp::*, Client};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, future::Future};
+use tokio::sync::Mutex;
+use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use tree_sitter::{Node, Parser, Tree};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -21,18 +21,18 @@ pub struct SnippetCompletionItem {
 }
 pub struct Backend {
     pub(crate) client: Client,
-    pub(crate) document_map: Arc<Mutex<HashMap<String, FullTextDocument>>>,
-    pub(crate) parser: Arc<Mutex<Parser>>,
-    pub(crate) parse_tree_map: Arc<Mutex<HashMap<String, Tree>>>,
-    postfix_template_list: Arc<Mutex<Vec<PostfixTemplate>>>,
+    pub(crate) document_map: Mutex<HashMap<String, FullTextDocument>>,
+    pub(crate) parser: Mutex<Parser>,
+    pub(crate) parse_tree_map: Mutex<HashMap<String, Tree>>,
+    postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
 }
 impl Backend {
     pub fn new(
         client: Client,
-        document_map: Arc<Mutex<HashMap<String, FullTextDocument>>>,
-        parser: Arc<Mutex<Parser>>,
-        postfix_template_list: Arc<Mutex<Vec<PostfixTemplate>>>,
-        parse_tree_map: Arc<Mutex<HashMap<String, Tree>>>,
+        document_map: Mutex<HashMap<String, FullTextDocument>>,
+        parser: Mutex<Parser>,
+        postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
+        parse_tree_map: Mutex<HashMap<String, Tree>>,
     ) -> Self {
         Self {
             client,

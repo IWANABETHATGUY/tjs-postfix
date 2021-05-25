@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex as StdMutex},
 };
-
+use tokio::sync::Mutex;
 use lspower::{jsonrpc::Result, lsp::*, Client, LanguageServer, LspService, Server};
 use tjs_language_server::Backend;
 
@@ -17,10 +17,10 @@ async fn main() {
         let language = unsafe { tree_sitter_tsx() };
         let mut parser = tree_sitter::Parser::new();
         parser.set_language(language).unwrap();
-        let parser = Arc::new(Mutex::new(parser));
-        let document_map = Arc::new(Mutex::new(HashMap::new()));
-        let parse_tree_map = Arc::new(Mutex::new(HashMap::new()));
-        let postfix_template_list = Arc::new(Mutex::new(vec![]));
+        let parser = Mutex::new(parser);
+        let document_map = Mutex::new(HashMap::new());
+        let parse_tree_map = Mutex::new(HashMap::new());
+        let postfix_template_list = Arc::new(StdMutex::new(vec![]));
         Backend::new(
             client,
             document_map,

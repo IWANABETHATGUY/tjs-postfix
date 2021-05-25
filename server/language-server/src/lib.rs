@@ -68,7 +68,7 @@ impl LanguageServer for Backend {
             if let Some(params) = _params {
                 let param = serde_json::from_value::<AstPreviewRequestParams>(params).unwrap();
                 let path_ast_tuple =
-                    if let Some(tree) = self.parse_tree_map.lock().unwrap().get(&param.path) {
+                    if let Some(tree) = self.parse_tree_map.lock().await.get(&param.path) {
                         Some((param.path, format!("{}", TreeWrapper(tree.clone(),))))
                     } else {
                         None
@@ -108,10 +108,10 @@ impl LanguageServer for Backend {
         if let Some(document) = self
             .document_map
             .lock()
-            .unwrap()
+            .await
             .get(&params.text_document.uri.to_string())
         {
-            let map = self.parse_tree_map.lock().unwrap();
+            let map = self.parse_tree_map.lock().await;
             if let Some(tree) = map.get(&params.text_document.uri.to_string()) {
                 {
                     let duration = Instant::now();
@@ -209,12 +209,12 @@ impl LanguageServer for Backend {
             version,
             text,
         } = params.text_document;
-        let tree = self.parser.lock().unwrap().parse(&text, None).unwrap();
+        let tree = self.parser.lock().await.parse(&text, None).unwrap();
         self.parse_tree_map
             .lock()
-            .unwrap()
+            .await
             .insert(uri.to_string(), tree);
-        self.document_map.lock().unwrap().insert(
+        self.document_map.lock().await.insert(
             uri.to_string(),
             FullTextDocument::new(uri, language_id, version as i64, text),
         );
@@ -224,17 +224,11 @@ impl LanguageServer for Backend {
         if let Some(document) = self
             .document_map
             .lock()
-            .unwrap()
+            .await
             .get_mut(&params.text_document.uri.to_string())
         {
-            let mut parser = self.parser.lock().unwrap();
-            let mut parse_tree_map = match self.parse_tree_map.lock() {
-                Ok(map) => map,
-                Err(_) => {
-                    error!("can't hold the parse tree map lock");
-                    return;
-                }
-            };
+            let mut parser = self.parser.lock().await;
+            let mut parse_tree_map = self.parse_tree_map.lock().await;
             let changes: Vec<lsp_types::TextDocumentContentChangeEvent> = params
                 .content_changes
                 .into_iter()
@@ -278,7 +272,7 @@ impl LanguageServer for Backend {
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         let start = Instant::now();
         let path = params.text_document.uri.to_string();
-        let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().unwrap().get(&path) {
+        let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().await.get(&path) {
             Some((path, format!("{}", TreeWrapper(tree.clone(),))))
         } else {
             None
@@ -295,7 +289,7 @@ impl LanguageServer for Backend {
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        let mut map = self.document_map.lock().unwrap();
+        let mut map = self.document_map.lock().await;
         map.remove(&params.text_document.uri.to_string());
     }
 
@@ -304,7 +298,7 @@ impl LanguageServer for Backend {
             if let Some(document) = self
                 .document_map
                 .lock()
-                .unwrap()
+                .await
                 .get(&params.text_document_position.text_document.uri.to_string())
             {
                 let pos = params.text_document_position.position.clone();
@@ -318,7 +312,7 @@ impl LanguageServer for Backend {
                 if before_string.is_none() {
                     return Ok(None);
                 }
-                let map = self.parse_tree_map.lock().unwrap();
+                let map = self.parse_tree_map.lock().await;
                 let tree = map.get(&params.text_document_position.text_document.uri.to_string());
                 match tree {
                     Some(tree) => {
