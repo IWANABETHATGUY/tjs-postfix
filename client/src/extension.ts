@@ -55,6 +55,7 @@ export async function activate(context: ExtensionContext) {
           path: window.activeTextEditor.document.uri.toString(),
         });
       }
+      
       currentPanel.onDidDispose(
         () => {
           currentPanel = undefined;
@@ -91,6 +92,8 @@ export async function activate(context: ExtensionContext) {
       { scheme: "file", language: "typescript" },
       { scheme: "file", language: "javascript" },
       { scheme: "file", language: "vue" },
+      { scheme: "file", language: "typescriptreact" },
+      { scheme: "file", language: "javascriptreact" },
     ],
     synchronize: {
       // Notify the server about file changes to '.clientrc files contained in the workspace
