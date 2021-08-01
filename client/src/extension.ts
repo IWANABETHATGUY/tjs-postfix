@@ -68,7 +68,7 @@ export async function activate(context: ExtensionContext) {
   const traceOutputChannel = window.createOutputChannel(
     "Tjs language server trace"
   );
-  const command = "tjs-language-server.exe";
+  const command = process.env.SERVER_PATH || "tjs-language-server";
   const run: Executable = {
     command,
     options: {

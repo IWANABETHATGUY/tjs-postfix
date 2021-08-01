@@ -1,9 +1,10 @@
 use std::{collections::HashMap, time::Instant};
 
 pub use backend::TreeWrapper;
-use helper::{get_tree_sitter_edit_from_change, pretty_print};
+use helper::get_tree_sitter_edit_from_change;
 // use helper::get_tree_sitter_edit_from_change;
-use log::{debug, error};
+use lsp_text_document::lsp_types;
+use log::debug;
 use lsp_text_document::FullTextDocument;
 use lspower::jsonrpc;
 use lspower::jsonrpc::Result;

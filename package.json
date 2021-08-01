@@ -17,9 +17,11 @@
     "vscode": "^1.44.0"
   },
   "activationEvents": [
-    "onLanguage:*"
+    "onLanguage:typescript",
+    "onLanguage:javascript",
+    "onLanguage:vue"
   ],
-  "main": "./dist/extension.js",
+  "main": "./client/out/extension.js",
   "contributes": {
     "commands": [
       {
