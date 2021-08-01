@@ -73,7 +73,7 @@ export async function activate(context: ExtensionContext) {
     command,
     options: {
       env: {
-        // eslint-disable-next-line @typescript-eslint/naming-convention
+        ...process.env,
         RUST_LOG: "debug",
       },
     },
