@@ -1,6 +1,6 @@
 use log::debug;
 use lsp_text_document::FullTextDocument;
-use lsp_types::TextDocumentContentChangeEvent;
+use lsp_text_document::lsp_types::TextDocumentContentChangeEvent;
 use tree_sitter::{InputEdit, Node, Point};
 
 pub fn get_tree_sitter_edit_from_change(
