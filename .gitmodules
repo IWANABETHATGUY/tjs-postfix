@@ -1,0 +1,3 @@
+[submodule "server/treesitter-ts/tree-sitter-typescript"]
+	path = server/treesitter-ts/tree-sitter-typescript
+	url = git@github.com:tree-sitter/tree-sitter-typescript.git
