@@ -152,6 +152,14 @@ impl Backend {
                 detail: String::from("return expr"),
                 replace_string_generator: Box::new(|name| format!("return {}", name)),
             },
+            SnippetCompletionItem {
+                label: String::from("benchGroup"),
+                detail: String::from("benchGroup"),
+                replace_string_generator: Box::new(|name| format!(r#"console.time('{}')
+                ${{0}}
+console.timeEnd('{}')
+                "#, name, name)),
+            },
             // foreach
             SnippetCompletionItem {
                 label: String::from("for"),
