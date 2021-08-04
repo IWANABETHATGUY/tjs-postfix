@@ -11,6 +11,8 @@ import {
   commands,
   ViewColumn,
   WebviewPanel,
+  CodeAction,
+  WorkspaceEdit,
 } from "vscode";
 
 import {
@@ -36,9 +38,7 @@ export async function activate(context: ExtensionContext) {
   let currentPanel: WebviewPanel | undefined = undefined;
   context.subscriptions.push(
     commands.registerCommand("tjs-postfix.ast-preview", () => {
-      const columnToShowIn = window.activeTextEditor
-        ? window.activeTextEditor.viewColumn
-        : undefined;
+      const columnToShowIn = window.activeTextEditor ? window.activeTextEditor.viewColumn : undefined;
 
       if (currentPanel) {
         // If we already have a panel, show it in the target column
@@ -51,11 +51,11 @@ export async function activate(context: ExtensionContext) {
           ViewColumn.Two, // Editor column to show the new webview panel in.
           {} // Webview options. More on these later.
         );
-        client.sendRequest('tjs-postfix/ast-preview', {
+        client.sendRequest("tjs-postfix/ast-preview", {
           path: window.activeTextEditor.document.uri.toString(),
         });
       }
-      
+
       currentPanel.onDidDispose(
         () => {
           currentPanel = undefined;
@@ -65,9 +65,28 @@ export async function activate(context: ExtensionContext) {
       );
     })
   );
-  const traceOutputChannel = window.createOutputChannel(
-    "Tjs language server trace"
+  context.subscriptions.push(
+    commands.registerCommand("tjs-postfix.insert-bench-label", async (uri, range, content) => {
+      try {
+        const result = await window.showInputBox({
+          value: "label",
+          placeHolder: "input your bench label",
+        });
+        const edit = new WorkspaceEdit();
+        edit.replace(
+          uri,
+          range,
+          `console.time('${result}')
+${content}
+console.timeEnd('${result}')`
+        );
+        workspace.applyEdit(edit);
+      } catch (e) {
+        console.warn(e);
+      }
+    })
   );
+  const traceOutputChannel = window.createOutputChannel("Tjs language server trace");
   const command = process.env.SERVER_PATH || "tjs-language-server";
   const run: Executable = {
     command,
@@ -99,19 +118,33 @@ export async function activate(context: ExtensionContext) {
       // Notify the server about file changes to '.clientrc files contained in the workspace
       fileEvents: workspace.createFileSystemWatcher("**/.clientrc"),
     },
+    middleware: {
+      provideCodeActions(doc, range, context, token) {
+        return new Promise((resolve, reject) => {
+          const result = [];
+          if (!range.isEmpty) {
+            const content = doc.getText(range);
+
+            const action: CodeAction = {
+              title: "insert bench label",
+              command: {
+                title: "insert-bench-label",
+                command: "tjs-postfix.insert-bench-label",
+                arguments: [doc.uri, range, content],
+              },
+            };
+            result.push(action);
+          }
+          resolve(result);
+        });
+      },
+    },
     traceOutputChannel,
   };
 
   // Create the language client and start the client.
-  client = new LanguageClient(
-    "tjs-postfix",
-    "TJS Language Server",
-    serverOptions,
-    clientOptions
-  );
-
+  client = new LanguageClient("tjs-postfix", "TJS Language Server", serverOptions, clientOptions);
   // Create the language client and start the client.
-
   // Start the client. This will also launch the server
   client.onReady().then(() => {
     client.onNotification("tjs-postfix/notification", (...args) => {
