@@ -133,6 +133,11 @@ impl Backend {
                 replace_string_generator: Box::new(|name| format!("const ${{0}} = {}", name)),
             },
             SnippetCompletionItem {
+                label: String::from("useState"),
+                detail: String::from("const name = expr"),
+                replace_string_generator: Box::new(|name| format!("const ${{0}} = {}", name)),
+            },
+            SnippetCompletionItem {
                 label: String::from("cast"),
                 detail: String::from("(<name>expr)"),
                 replace_string_generator: Box::new(|name| format!("(<${{0}}>{})", name)),

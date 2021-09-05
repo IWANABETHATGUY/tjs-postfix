@@ -195,7 +195,7 @@ impl LanguageServer for Backend {
         unimplemented!() // TODO
     }
 
-    async fn execute_command(&self, params: ExecuteCommandParams) -> Result<Option<Value>> {
+    async fn execute_command(&self, _params: ExecuteCommandParams) -> Result<Option<Value>> {
         self.client
             .log_message(MessageType::Info, "command executed!")
             .await;
@@ -295,7 +295,7 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        if let Some(context) = params.context {
+        if let Some(_) = params.context {
             if let Some(document) = self
                 .document_map
                 .lock()
