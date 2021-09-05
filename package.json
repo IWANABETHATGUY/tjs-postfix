@@ -21,7 +21,7 @@
     "onLanguage:javascript",
     "onLanguage:vue"
   ],
-  "main": "./dist/extension.js",
+  "main": "./client/out/extension.js",
   "contributes": {
     "commands": [
       {

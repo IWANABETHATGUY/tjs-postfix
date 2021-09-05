@@ -14,7 +14,7 @@
         "script": "watch"
       },
       "env": {
-        "SERVER_PATH": "${workspaceRoot}/server/target/release/tjs-language-server"
+        "SERVER_PATH": "${workspaceRoot}/server/target/debug/tjs-language-server"
       }
     },
     // {

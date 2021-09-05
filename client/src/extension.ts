@@ -16,6 +16,7 @@ import {
 } from "vscode";
 
 import {
+  CodeActionParams,
   Executable,
   LanguageClient,
   LanguageClientOptions,
@@ -24,7 +25,21 @@ import {
 } from "vscode-languageclient/node";
 
 let client: LanguageClient;
-
+type CodeActionHandler = Parameters<LanguageClientOptions["middleware"]["provideCodeActions"]>;
+// type a = Parameters<>;
+const getCodeActionFromServer: (...args: Partial<CodeActionHandler>) => Promise<any> = (doc, range, context, token) => {
+  const params: CodeActionParams = {
+    textDocument: client.code2ProtocolConverter.asTextDocumentIdentifier(doc),
+    range: client.code2ProtocolConverter.asRange(range),
+    context: client.code2ProtocolConverter.asCodeActionContext(context),
+  };
+  return client
+    .sendRequest("textDocument/codeAction", params, token)
+    .then(res => res || [])
+    .catch(err => {
+      return [];
+    });
+};
 export async function activate(context: ExtensionContext) {
   // The server is implemented in node
   // let serverModule = context.asAbsolutePath(
@@ -93,6 +108,7 @@ console.timeEnd('${result}')`
     options: {
       env: {
         ...process.env,
+        // eslint-disable-next-line @typescript-eslint/naming-convention
         RUST_LOG: "debug",
       },
     },
@@ -118,32 +134,43 @@ console.timeEnd('${result}')`
       // Notify the server about file changes to '.clientrc files contained in the workspace
       fileEvents: workspace.createFileSystemWatcher("**/.clientrc"),
     },
-    middleware: {
-      provideCodeActions(doc, range, context, token) {
-        return new Promise((resolve, reject) => {
-          const result = [];
-          if (!range.isEmpty) {
-            const content = doc.getText(range);
-
-            const action: CodeAction = {
-              title: "insert bench label",
-              command: {
-                title: "insert-bench-label",
-                command: "tjs-postfix.insert-bench-label",
-                arguments: [doc.uri, range, content],
-              },
-            };
-            result.push(action);
-          }
-          resolve(result);
-        });
-      },
-    },
+    middleware: {},
     traceOutputChannel,
   };
 
   // Create the language client and start the client.
   client = new LanguageClient("tjs-postfix", "TJS Language Server", serverOptions, clientOptions);
+  client.clientOptions.middleware.provideCodeActions = async (doc, range, context, token) => {
+    // return getCodeActionFromServer(doc,range, context, token );
+    try {
+      let res = await Promise.race([
+        getCodeActionFromServer(doc, range, context, token),
+        new Promise((resolve, reject) => {
+          setTimeout(() => {
+            resolve([]);
+          }, 1000);
+        }),
+      ]);
+      // debugger;
+      res = (res || []).map(client.protocol2CodeConverter.asCodeAction);
+      if (!range.isEmpty) {
+        const content = doc.getText(range);
+        const action: CodeAction = {
+          title: "insert bench label",
+          command: {
+            title: "insert-bench-label",
+            command: "tjs-postfix.insert-bench-label",
+            arguments: [doc.uri, range, content],
+          },
+        };
+        res.push(action);
+      }
+      return res;
+    } catch (err) {
+      return [];
+    }
+  };
+
   // Create the language client and start the client.
   // Start the client. This will also launch the server
   client.onReady().then(() => {
