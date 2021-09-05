@@ -1,10 +1,11 @@
+use inflector::Inflector;
 use lsp_text_document::FullTextDocument;
 use lspower::{lsp::*, Client};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, future::Future};
-use tokio::sync::Mutex;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
+use tokio::sync::Mutex;
 use tree_sitter::{Node, Parser, Tree};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -133,9 +134,14 @@ impl Backend {
                 replace_string_generator: Box::new(|name| format!("const ${{0}} = {}", name)),
             },
             SnippetCompletionItem {
-                label: String::from("useState"),
-                detail: String::from("const name = expr"),
-                replace_string_generator: Box::new(|name| format!("const ${{0}} = {}", name)),
+                label: String::from("state"),
+                detail: String::from("const [<expr>, set<expr>] = expr"),
+                replace_string_generator: Box::new(|name| {
+                    format!(
+                        "const [{}, set{}] = useState(${{0}})",
+                        name, name.to_pascal_case()
+                    )
+                }),
             },
             SnippetCompletionItem {
                 label: String::from("cast"),
@@ -157,15 +163,6 @@ impl Backend {
                 detail: String::from("return expr"),
                 replace_string_generator: Box::new(|name| format!("return {}", name)),
             },
-            SnippetCompletionItem {
-                label: String::from("benchGroup"),
-                detail: String::from("benchGroup"),
-                replace_string_generator: Box::new(|name| format!(r#"console.time('{}')
-                ${{0}}
-console.timeEnd('{}')
-                "#, name, name)),
-            },
-            // foreach
             SnippetCompletionItem {
                 label: String::from("for"),
                 detail: String::from("forloop"),
