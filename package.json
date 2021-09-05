@@ -3,7 +3,7 @@
   "description": "A postfix language server for typescript and javascript",
   "author": "Microsoft Corporation",
   "license": "MIT",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/IWANABETHATGUY/tjs-postfix"
@@ -21,7 +21,7 @@
     "onLanguage:javascript",
     "onLanguage:vue"
   ],
-  "main": "./client/out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
