@@ -1,12 +1,13 @@
+use lspower::{LspService, Server};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex as StdMutex},
 };
-use tokio::sync::Mutex;
-use lspower::{jsonrpc::Result, lsp::*, Client, LanguageServer, LspService, Server};
 use tjs_language_server::Backend;
+use tokio::sync::Mutex;
 
 use treesitter_ts::tree_sitter_tsx;
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -33,8 +34,4 @@ async fn main() {
         .interleave(messages)
         .serve(service)
         .await;
-    // Server::new(stdin, stdout)
-    //     .interleave(messages)
-    //     .serve(service)
-    //     .await;
 }
