@@ -140,6 +140,18 @@ console.timeEnd('${result}')`
 
   // Create the language client and start the client.
   client = new LanguageClient("tjs-postfix", "TJS Language Server", serverOptions, clientOptions);
+
+  context.subscriptions.push(
+    commands.registerCommand("tjs-postfix.restart-language-server", async (uri, range, content) => {
+      try {
+        client.stop();
+        client.start();
+      } catch (e) {
+        console.error(e);
+      }
+    })
+  );
+
   client.clientOptions.middleware.provideCodeActions = async (doc, range, context, token) => {
     // return getCodeActionFromServer(doc,range, context, token );
     try {

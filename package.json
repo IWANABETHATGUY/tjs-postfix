@@ -3,7 +3,7 @@
   "description": "A postfix language server for typescript and javascript",
   "author": "Microsoft Corporation",
   "license": "MIT",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/IWANABETHATGUY/tjs-postfix"
@@ -19,7 +19,9 @@
   "activationEvents": [
     "onLanguage:typescript",
     "onLanguage:javascript",
-    "onLanguage:vue"
+    "onLanguage:vue",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascriptreact"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -27,6 +29,11 @@
       {
         "command": "tjs-postfix.ast-preview",
         "title": "preview current active editor ast",
+        "category": "tjs-postfix"
+      },
+      {
+        "command": "tjs-postfix.restart-language-server",
+        "title": "restart tjs-language server",
         "category": "tjs-postfix"
       }
     ],
