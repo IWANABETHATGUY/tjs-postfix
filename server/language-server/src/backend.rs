@@ -119,6 +119,18 @@ impl Backend {
                 }),
             },
             SnippetCompletionItem {
+                label: String::from("ifn"),
+                detail: String::from("if (!expr)"),
+                replace_string_generator: Box::new(|name| {
+                    format!(
+                        r#"if (!{}) {{
+    ${{0}}
+}}"#,
+                        name
+                    )
+                }),
+            },
+            SnippetCompletionItem {
                 label: String::from("var"),
                 detail: String::from("var name = expr"),
                 replace_string_generator: Box::new(|name| format!("var ${{0}} = {}", name)),
