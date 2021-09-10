@@ -17,18 +17,13 @@ use serde_json::Value;
 mod backend;
 mod helper;
 mod notification;
+mod query_pattern;
 pub use backend::Backend;
 use tree_sitter::Query;
 use tree_sitter::QueryCursor;
 
-const DOCUMENT_SYMBOL_QUERY_PATTERN: &str = r#"
-                (jsx_opening_element
-                    name: (_) @a
-                )
-                (jsx_self_closing_element
-                    name: (_) @a
-                )
-                "#;
+use crate::query_pattern::DOCUMENT_SYMBOL_QUERY_PATTERN;
+
 #[lspower::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
@@ -121,7 +116,6 @@ impl LanguageServer for Backend {
         &self,
         params: lsp_types::DocumentSymbolParams,
     ) -> lspower::jsonrpc::Result<Option<lsp_types::DocumentSymbolResponse>> {
-        debug!("document-symbol: start",);
         if let Some(document) = self
             .document_map
             .lock()
@@ -140,19 +134,15 @@ impl LanguageServer for Backend {
                 let mut cursor = QueryCursor::new();
                 let node = tree.root_node();
                 let mut symbol_infos = vec![];
-                let res = cursor.captures(&query, node, |_| {
-                    return "";
-                });
+                let source = document.rope.to_string();
+                let source_bytes = source.as_bytes();
+                let res = cursor.captures(&query, node, source_bytes);
                 for item in res {
                     for cap in item.0.captures {
                         let current_node = cap.node;
                         if let Ok(name) =
-                            current_node.utf8_text(document.rope.to_string().as_bytes())
+                            current_node.utf8_text(source_bytes)
                         {
-                            let first_char_of_name = name.chars().next();
-                            if first_char_of_name.is_none() || first_char_of_name.unwrap().is_ascii_lowercase() {
-                                continue;
-                            }
                             symbol_infos.push(SymbolInformation {
                                 name: name.to_string(),
                                 kind: SymbolKind::Operator,
