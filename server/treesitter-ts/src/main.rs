@@ -3,19 +3,25 @@ use std::{
     fs::read_to_string,
     sync::{Arc, Mutex},
 };
-use tree_sitter::{Language, Node, Parser, TreeCursor};
+use tree_sitter::{Language, Node, Parser, Query, QueryCursor, QueryMatch, TreeCursor};
 use treesitter_ts::{tree_sitter_tsx, tree_sitter_typescript};
 
 fn main() {
     let language = unsafe { tree_sitter_tsx() };
-    let language_typescript = unsafe { tree_sitter_typescript() };
     let mut parser = Parser::new();
     parser.set_language(language).unwrap();
     let parser = Arc::new(Mutex::new(parser));
-    let res = read_to_string("test2.ts").unwrap();
+    let source = read_to_string("test.tsx").unwrap();
     let mut parser = parser.lock().unwrap();
     // let start = Instant::now();
-    let tree = parser.parse(&res, None).unwrap();
+    let pattern = r#"
+    (jsx_opening_element
+        (_) @a
+    )
+    "#;
+    let tree = parser.parse(&source, None).unwrap();
+    let query = Query::new(language, &pattern).unwrap();
+    let mut cursor = QueryCursor::new();
     // println!("{:?}", start.elapsed());
     // parser.set_language(language_typescript).unwrap();
     // let start = Instant::now();
@@ -25,9 +31,17 @@ fn main() {
     //     let start = Instant::now();
     //     println!("{:?}", start.elapsed());
     // }
-    println!("{:?}", tree);
+    // println!("{:?}", tree);
     let node = tree.root_node();
-    pretty_print(&res, node, 0);
+    pretty_print(&source, node, 0);
+    let res = cursor.matches(&query, node, |_| {
+        return "";
+    });
+    for item in res {
+        for cap in item.captures {
+            println!("{:?}", cap.node.utf8_text(source.as_bytes())); 
+        }
+    }
 }
 
 fn pretty_print(source_code: &str, root: Node, level: usize) {

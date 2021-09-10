@@ -3,8 +3,8 @@ use std::{collections::HashMap, time::Instant};
 pub use backend::TreeWrapper;
 use helper::get_tree_sitter_edit_from_change;
 // use helper::get_tree_sitter_edit_from_change;
-use lsp_text_document::lsp_types;
 use log::debug;
+use lsp_text_document::lsp_types;
 use lsp_text_document::FullTextDocument;
 use lspower::jsonrpc;
 use lspower::jsonrpc::Result;
@@ -13,11 +13,22 @@ use lspower::LanguageServer;
 use notification::{AstPreviewRequestParams, CustomNotification, CustomNotificationParams};
 use serde_json::Value;
 
+
 mod backend;
 mod helper;
 mod notification;
 pub use backend::Backend;
+use tree_sitter::Query;
+use tree_sitter::QueryCursor;
 
+const DOCUMENT_SYMBOL_QUERY_PATTERN: &str = r#"
+                (jsx_opening_element
+                    name: (_) @a
+                )
+                (jsx_self_closing_element
+                    name: (_) @a
+                )
+                "#;
 #[lspower::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
@@ -38,6 +49,7 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                 }),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 workspace: Some(WorkspaceServerCapabilities {
                     workspace_folders: Some(WorkspaceFoldersServerCapabilities {
                         supported: Some(true),
@@ -104,6 +116,76 @@ impl LanguageServer for Backend {
             .log_message(MessageType::Info, "watched files have changed!")
             .await;
     }
+
+    async fn document_symbol(
+        &self,
+        params: lsp_types::DocumentSymbolParams,
+    ) -> lspower::jsonrpc::Result<Option<lsp_types::DocumentSymbolResponse>> {
+        debug!("document-symbol: start",);
+        if let Some(document) = self
+            .document_map
+            .lock()
+            .await
+            .get_mut(&params.text_document.uri.to_string())
+        {
+            let res = if let Some(tree) = self
+                .parse_tree_map
+                .lock()
+                .await
+                .get(&params.text_document.uri.to_string())
+            {
+                let parser = self.parser.lock().await;
+
+                let query = Query::new(parser.language().unwrap(), &DOCUMENT_SYMBOL_QUERY_PATTERN).unwrap();
+                let mut cursor = QueryCursor::new();
+                let node = tree.root_node();
+                let mut symbol_infos = vec![];
+                let res = cursor.captures(&query, node, |_| {
+                    return "";
+                });
+                for item in res {
+                    for cap in item.0.captures {
+                        let current_node = cap.node;
+                        if let Ok(name) =
+                            current_node.utf8_text(document.rope.to_string().as_bytes())
+                        {
+                            let first_char_of_name = name.chars().next();
+                            if first_char_of_name.is_none() || first_char_of_name.unwrap().is_ascii_lowercase() {
+                                continue;
+                            }
+                            symbol_infos.push(SymbolInformation {
+                                name: name.to_string(),
+                                kind: SymbolKind::Operator,
+                                tags: None,
+                                deprecated: None,
+                                location: Location {
+                                    uri: params.text_document.uri.clone(),
+                                    range: Range::new(
+                                        Position::new(
+                                            current_node.start_position().row as u32,
+                                            current_node.start_position().column as u32,
+                                        ),
+                                        Position::new(
+                                            current_node.end_position().row as u32,
+                                            current_node.end_position().column as u32,
+                                        ),
+                                    ),
+                                },
+                                container_name: None,
+                            });
+                        }
+                    }
+                }
+                Ok(Some(DocumentSymbolResponse::Flat(symbol_infos)))
+            } else {
+                Ok(None)
+            };
+            return res;
+        } else {
+            Ok(None)
+        }
+    }
+
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let mut code_action = CodeActionResponse::new();
         if let Some(document) = self
