@@ -23,7 +23,7 @@ fn main() {
 )
 (jsx_self_closing_element
     name: (_) @a
-    (#match? @a "Component")
+    (#match? @a "^[A-Z]")
 )
     "#;
     let tree = parser.parse(&source, None).unwrap();
@@ -50,9 +50,7 @@ fn main() {
         }
     }
 }
-struct A<TT: Mul<Output=i32>> {
-    a: TT
-}
+
 fn pretty_print(source_code: &str, root: Node, level: usize) {
     if !root.is_named() {
         return;

@@ -13,16 +13,13 @@ use lspower::LanguageServer;
 use notification::{AstPreviewRequestParams, CustomNotification, CustomNotificationParams};
 use serde_json::Value;
 
-
 mod backend;
+mod document_symbol;
 mod helper;
 mod notification;
 mod query_pattern;
 pub use backend::Backend;
-use tree_sitter::Query;
-use tree_sitter::QueryCursor;
-
-use crate::query_pattern::DOCUMENT_SYMBOL_QUERY_PATTERN;
+use document_symbol::get_component_symbol;
 
 #[lspower::async_trait]
 impl LanguageServer for Backend {
@@ -116,64 +113,7 @@ impl LanguageServer for Backend {
         &self,
         params: lsp_types::DocumentSymbolParams,
     ) -> lspower::jsonrpc::Result<Option<lsp_types::DocumentSymbolResponse>> {
-        if let Some(document) = self
-            .document_map
-            .lock()
-            .await
-            .get_mut(&params.text_document.uri.to_string())
-        {
-            let res = if let Some(tree) = self
-                .parse_tree_map
-                .lock()
-                .await
-                .get(&params.text_document.uri.to_string())
-            {
-                let parser = self.parser.lock().await;
-
-                let query = Query::new(parser.language().unwrap(), &DOCUMENT_SYMBOL_QUERY_PATTERN).unwrap();
-                let mut cursor = QueryCursor::new();
-                let node = tree.root_node();
-                let mut symbol_infos = vec![];
-                let source = document.rope.to_string();
-                let source_bytes = source.as_bytes();
-                let res = cursor.captures(&query, node, source_bytes);
-                for item in res {
-                    for cap in item.0.captures {
-                        let current_node = cap.node;
-                        if let Ok(name) =
-                            current_node.utf8_text(source_bytes)
-                        {
-                            symbol_infos.push(SymbolInformation {
-                                name: name.to_string(),
-                                kind: SymbolKind::Operator,
-                                tags: None,
-                                deprecated: None,
-                                location: Location {
-                                    uri: params.text_document.uri.clone(),
-                                    range: Range::new(
-                                        Position::new(
-                                            current_node.start_position().row as u32,
-                                            current_node.start_position().column as u32,
-                                        ),
-                                        Position::new(
-                                            current_node.end_position().row as u32,
-                                            current_node.end_position().column as u32,
-                                        ),
-                                    ),
-                                },
-                                container_name: None,
-                            });
-                        }
-                    }
-                }
-                Ok(Some(DocumentSymbolResponse::Flat(symbol_infos)))
-            } else {
-                Ok(None)
-            };
-            return res;
-        } else {
-            Ok(None)
-        }
+        get_component_symbol(&self, params).await
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
@@ -186,82 +126,78 @@ impl LanguageServer for Backend {
         {
             let map = self.parse_tree_map.lock().await;
             if let Some(tree) = map.get(&params.text_document.uri.to_string()) {
+                let duration = Instant::now();
+                let root = tree.root_node();
+                let range = params.range;
+                let start = range.start;
+                let end = range.end;
+
+                let start_char =
+                    document.rope.line_to_char(start.line as usize) + start.character as usize;
+                let end_char =
+                    document.rope.line_to_char(end.line as usize) + end.character as usize;
+                let start_byte = document.rope.char_to_byte(start_char);
+                let end_byte = document.rope.char_to_byte(end_char);
+
+                let start_node = root.named_descendant_for_byte_range(start_byte, start_byte);
+                let end_node = root.named_descendant_for_byte_range(end_byte, end_byte);
+                if start_node.is_none() || end_node.is_none() {
+                    return Ok(None);
+                }
+                let start_node = start_node.unwrap();
+                let end_node = end_node.unwrap();
+                if start_node.kind() != "property_identifier"
+                    || end_node.kind() != "property_identifier"
                 {
-                    let duration = Instant::now();
-                    let root = tree.root_node();
-                    let range = params.range;
-                    let start = range.start;
-                    let end = range.end;
-
-                    let start_char =
-                        document.rope.line_to_char(start.line as usize) + start.character as usize;
-                    let end_char =
-                        document.rope.line_to_char(end.line as usize) + end.character as usize;
-                    let start_byte = document.rope.char_to_byte(start_char);
-                    let end_byte = document.rope.char_to_byte(end_char);
-
-                    let start_node = root.named_descendant_for_byte_range(start_byte, start_byte);
-                    let end_node = root.named_descendant_for_byte_range(end_byte, end_byte);
-                    if start_node.is_none() || end_node.is_none() {
-                        return Ok(None);
-                    }
-                    let start_node = start_node.unwrap();
-                    let end_node = end_node.unwrap();
-                    if start_node.kind() != "property_identifier"
-                        || end_node.kind() != "property_identifier"
+                    return Ok(None);
+                }
+                match (start_node.parent(), end_node.parent()) {
+                    (Some(sp), Some(ep))
+                        if sp.kind() == "member_expression" && ep.kind() == "member_expression" =>
                     {
-                        return Ok(None);
-                    }
-                    match (start_node.parent(), end_node.parent()) {
-                        (Some(sp), Some(ep))
-                            if sp.kind() == "member_expression"
-                                && ep.kind() == "member_expression" =>
-                        {
-                            let start_object_node = sp.child_by_field_name("object");
-                            let end_object_node = ep.child_by_field_name("object");
-                            if let (Some(start), Some(end)) = (start_object_node, end_object_node) {
-                                let replace_range = Range::new(
-                                    Position::new(
-                                        ep.start_position().row as u32,
-                                        ep.start_position().column as u32,
-                                    ),
-                                    Position::new(
-                                        ep.end_position().row as u32,
-                                        ep.end_position().column as u32,
-                                    ),
-                                );
-                                let object_source_code =
-                                    &document.rope.to_string()[start.byte_range()];
+                        let start_object_node = sp.child_by_field_name("object");
+                        let end_object_node = ep.child_by_field_name("object");
+                        if let (Some(start), Some(end)) = (start_object_node, end_object_node) {
+                            let replace_range = Range::new(
+                                Position::new(
+                                    ep.start_position().row as u32,
+                                    ep.start_position().column as u32,
+                                ),
+                                Position::new(
+                                    ep.end_position().row as u32,
+                                    ep.end_position().column as u32,
+                                ),
+                            );
+                            let document_source = document.rope.to_string();
+                            let object_source_code = &document_source[start.byte_range()];
 
-                                let function = &document.rope.to_string()
-                                    [start_node.start_byte()..end_node.end_byte()];
+                            let function = &document_source[start_node.start_byte()..end_node.end_byte()];
 
-                                let replaced_code = format!("{}({})", function, object_source_code);
+                            let replaced_code = format!("{}({})", function, object_source_code);
 
-                                let edit = TextEdit::new(replace_range, replaced_code.clone());
-                                let mut changes = HashMap::new();
-                                changes.insert(params.text_document.uri, vec![edit]);
-                                code_action.push(CodeActionOrCommand::CodeAction(CodeAction {
-                                    title: format!("call this function -> {}", replaced_code),
-                                    kind: Some(CodeActionKind::REFACTOR_REWRITE),
-                                    diagnostics: None,
-                                    edit: Some(WorkspaceEdit::new(changes)),
-                                    command: None,
-                                    is_preferred: Some(false),
-                                    disabled: None,
-                                    data: None,
-                                }));
-                            } else {
-                                return Ok(None);
-                            }
-                        }
-                        _ => {
+                            let edit = TextEdit::new(replace_range, replaced_code.clone());
+                            let mut changes = HashMap::new();
+                            changes.insert(params.text_document.uri, vec![edit]);
+                            code_action.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                title: format!("call this function -> {}", replaced_code),
+                                kind: Some(CodeActionKind::REFACTOR_REWRITE),
+                                diagnostics: None,
+                                edit: Some(WorkspaceEdit::new(changes)),
+                                command: None,
+                                is_preferred: Some(false),
+                                disabled: None,
+                                data: None,
+                            }));
+                        } else {
                             return Ok(None);
                         }
                     }
-                    debug!("code-action: {:?}", duration.elapsed());
-                    return Ok(Some(code_action));
+                    _ => {
+                        return Ok(None);
+                    }
                 }
+                debug!("code-action: {:?}", duration.elapsed());
+                return Ok(Some(code_action));
             }
         }
         unimplemented!() // TODO
