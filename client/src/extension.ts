@@ -13,6 +13,9 @@ import {
   WebviewPanel,
   CodeAction,
   WorkspaceEdit,
+  Range as ClientRange,
+  Position,
+  TextDocument,
 } from "vscode";
 
 import {
@@ -20,12 +23,14 @@ import {
   Executable,
   LanguageClient,
   LanguageClientOptions,
+  Range,
   ServerOptions,
   TransportKind,
 } from "vscode-languageclient/node";
 
 let client: LanguageClient;
 type CodeActionHandler = Parameters<LanguageClientOptions["middleware"]["provideCodeActions"]>;
+type ActionHandlerReturnType = ReturnType<LanguageClientOptions["middleware"]["provideCodeActions"]>;
 // type a = Parameters<>;
 const getCodeActionFromServer: (...args: Partial<CodeActionHandler>) => Promise<any> = (doc, range, context, token) => {
   const params: CodeActionParams = {
@@ -152,36 +157,7 @@ console.timeEnd('${result}')`
     })
   );
 
-  client.clientOptions.middleware.provideCodeActions = async (doc, range, context, token) => {
-    // return getCodeActionFromServer(doc,range, context, token );
-    try {
-      let res = await Promise.race([
-        getCodeActionFromServer(doc, range, context, token),
-        new Promise((resolve, reject) => {
-          setTimeout(() => {
-            resolve([]);
-          }, 1000);
-        }),
-      ]);
-      // debugger;
-      res = (res || []).map(client.protocol2CodeConverter.asCodeAction);
-      if (!range.isEmpty) {
-        const content = doc.getText(range);
-        const action: CodeAction = {
-          title: "insert bench label",
-          command: {
-            title: "insert-bench-label",
-            command: "tjs-postfix.insert-bench-label",
-            arguments: [doc.uri, range, content],
-          },
-        };
-        res.push(action);
-      }
-      return res;
-    } catch (err) {
-      return [];
-    }
-  };
+  client.clientOptions.middleware.provideCodeActions = codeActionProvider;
 
   // Create the language client and start the client.
   // Start the client. This will also launch the server
@@ -210,4 +186,87 @@ function getWebContent(path: string, astString: string): string {
     <h2>${path}</h2>
     <pre>${astString}</pre>
   `;
+}
+
+const codeActionProvider: (...args: Partial<CodeActionHandler>) => ActionHandlerReturnType = async (
+  doc,
+  range,
+  context,
+  token
+) => {
+  // return getCodeActionFromServer(doc,range, context, token );
+  let result = [];
+  try {
+    let res = await Promise.race([
+      getCodeActionFromServer(doc, range, context, token),
+      new Promise((resolve, reject) => {
+        setTimeout(() => {
+          resolve([]);
+        }, 1000);
+      }),
+    ]);
+    // debugger;
+    result = (res || []).map(item => {
+      const normalizedItem = client.protocol2CodeConverter.asCodeAction(item);
+      if (normalizedItem.title === "extract react component") {
+        convertExtractComponentAction(normalizedItem, doc);
+      }
+      return normalizedItem;
+    });
+  } catch (err) {
+    console.error(err);
+  }
+  if (!range.isEmpty) {
+    const content = doc.getText(range);
+    const action: CodeAction = {
+      title: "insert bench label",
+      command: {
+        title: "insert-bench-label",
+        command: "tjs-postfix.insert-bench-label",
+        arguments: [doc.uri, range, content],
+      },
+    };
+    result.push(action);
+  }
+  return result;
+};
+
+interface IdentifierNode {
+  start: number;
+  end: number;
+  range: Range;
+  name: string;
+}
+interface ExtractComponentData {
+  identifierNodeList: IdentifierNode[];
+  jsxElementRange: Range;
+}
+
+function convertExtractComponentAction(normalizedItem: CodeAction, doc: TextDocument) {
+  const data: ExtractComponentData = (normalizedItem as any).data;
+  if (!data) {
+    return normalizedItem;
+  }
+  const {
+    identifierNodeList,
+    jsxElementRange: { end, start },
+  } = data;
+  const normalizedJsxElementRange = new ClientRange(
+    new Position(start.line, start.character),
+    new Position(end.line, end.character)
+  );
+  let edit = new WorkspaceEdit();
+  let docLength = doc.getText().length;
+  let endPosition = doc.positionAt(docLength);
+  let jsxElementText = doc.getText(normalizedJsxElementRange);
+  let componentFunction = `
+function Component1({${identifierNodeList.map(item => item.name).join(",")}}) {
+  return ${jsxElementText}
+} 
+`;
+  let componentInvoke = `<Component1 ${identifierNodeList.map(item => `${item.name}={${item.name}}`).join(" ")}/>`;
+  edit.insert(doc.uri, endPosition, componentFunction);
+  edit.replace(doc.uri, normalizedJsxElementRange, componentInvoke);
+  normalizedItem.edit = edit;
+  // result.edit.insert(doc.uri, doc, newText)
 }
