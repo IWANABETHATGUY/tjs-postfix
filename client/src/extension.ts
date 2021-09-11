@@ -16,6 +16,7 @@ import {
   Range as ClientRange,
   Position,
   TextDocument,
+  Selection,
 } from "vscode";
 
 import {
@@ -106,6 +107,19 @@ console.timeEnd('${result}')`
       }
     })
   );
+
+  context.subscriptions.push(
+    commands.registerCommand("tjs-postfix.move-cursor", async (range) => {
+      try {
+        let editor = window.activeTextEditor;
+        editor.selection = new Selection(range.start, range.end);
+        editor.revealRange(range);
+      } catch (e) {
+        console.warn(e);
+      }
+    })
+  );
+
   const traceOutputChannel = window.createOutputChannel("Tjs language server trace");
   const command = process.env.SERVER_PATH || "tjs-language-server";
   const run: Executable = {
@@ -259,14 +273,26 @@ function convertExtractComponentAction(normalizedItem: CodeAction, doc: TextDocu
   let docLength = doc.getText().length;
   let endPosition = doc.positionAt(docLength);
   let jsxElementText = doc.getText(normalizedJsxElementRange);
-  let componentFunction = `
+  let componentFunction = "";
+  // if (doc.languageId === "javascriptreact" || doc.languageId === "javascript") {
+  componentFunction = `
 function Component1({${identifierNodeList.map(item => item.name).join(",")}}) {
   return ${jsxElementText}
 } 
 `;
+  normalizedItem.title += ` ${componentFunction}`;
   let componentInvoke = `<Component1 ${identifierNodeList.map(item => `${item.name}={${item.name}}`).join(" ")}/>`;
   edit.insert(doc.uri, endPosition, componentFunction);
   edit.replace(doc.uri, normalizedJsxElementRange, componentInvoke);
   normalizedItem.edit = edit;
-  // result.edit.insert(doc.uri, doc, newText)
+  normalizedItem.command = {
+    command: "tjs-postfix.move-cursor",
+    title: "cursorMove",
+    arguments: [
+      {
+        start: normalizedJsxElementRange.start,
+        end: normalizedJsxElementRange.start
+      },
+    ],
+  };
 }

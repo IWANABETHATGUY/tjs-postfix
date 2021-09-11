@@ -20,5 +20,6 @@
 ## feature
 1. postfix
 ![postfix](https://raw.githubusercontent.com/IWANABETHATGUY/tjs-postfix/master/assets/postfix.gif)
-3. codeAction
+2. codeAction
 ![codeAction](https://raw.githubusercontent.com/IWANABETHATGUY/tjs-postfix/master/assets/codeAction.gif)
+3. extract-component
