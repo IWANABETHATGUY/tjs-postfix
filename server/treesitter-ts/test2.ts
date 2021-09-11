@@ -1,1 +1,4 @@
-trie.insert("我的你的");
+function test() {
+  function result() {
+  }
+}

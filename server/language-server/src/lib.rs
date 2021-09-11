@@ -14,14 +14,17 @@ use notification::{AstPreviewRequestParams, CustomNotification, CustomNotificati
 use serde_json::Value;
 
 mod backend;
+mod code_action;
 mod document_symbol;
 mod helper;
 mod notification;
 mod query_pattern;
+
 pub use backend::Backend;
 use document_symbol::get_component_symbol;
 
 use crate::helper::generate_lsp_range;
+use code_action::{extract_component_action, get_function_call_action};
 
 #[lspower::async_trait]
 impl LanguageServer for Backend {
@@ -119,87 +122,10 @@ impl LanguageServer for Backend {
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        let mut code_action = CodeActionResponse::new();
-        if let Some(document) = self
-            .document_map
-            .lock()
-            .await
-            .get(&params.text_document.uri.to_string())
-        {
-            let map = self.parse_tree_map.lock().await;
-            if let Some(tree) = map.get(&params.text_document.uri.to_string()) {
-                let duration = Instant::now();
-                let root = tree.root_node();
-                let range = params.range;
-                let start = range.start;
-                let end = range.end;
-
-                let start_char =
-                    document.rope.line_to_char(start.line as usize) + start.character as usize;
-                let end_char =
-                    document.rope.line_to_char(end.line as usize) + end.character as usize;
-                let start_byte = document.rope.char_to_byte(start_char);
-                let end_byte = document.rope.char_to_byte(end_char);
-
-                let start_node = root.named_descendant_for_byte_range(start_byte, start_byte);
-                let end_node = root.named_descendant_for_byte_range(end_byte, end_byte);
-                if start_node.is_none() || end_node.is_none() {
-                    return Ok(None);
-                }
-                let start_node = start_node.unwrap();
-                let end_node = end_node.unwrap();
-                if start_node.kind() != "property_identifier"
-                    || end_node.kind() != "property_identifier"
-                {
-                    return Ok(None);
-                }
-                match (start_node.parent(), end_node.parent()) {
-                    (Some(sp), Some(ep))
-                        if sp.kind() == "member_expression" && ep.kind() == "member_expression" =>
-                    {
-                        let start_object_node = sp.child_by_field_name("object");
-                        let end_object_node = ep.child_by_field_name("object");
-                        if let (Some(start), Some(_)) = (start_object_node, end_object_node) {
-                            let replace_range = generate_lsp_range(
-                                ep.start_position().row as u32,
-                                ep.start_position().column as u32,
-                                ep.end_position().row as u32,
-                                ep.end_position().column as u32,
-                            );
-                            let document_source = document.rope.to_string();
-                            let object_source_code = &document_source[start.byte_range()];
-
-                            let function =
-                                &document_source[start_node.start_byte()..end_node.end_byte()];
-
-                            let replaced_code = format!("{}({})", function, object_source_code);
-
-                            let edit = TextEdit::new(replace_range, replaced_code.clone());
-                            let mut changes = HashMap::new();
-                            changes.insert(params.text_document.uri, vec![edit]);
-                            code_action.push(CodeActionOrCommand::CodeAction(CodeAction {
-                                title: format!("call this function -> {}", replaced_code),
-                                kind: Some(CodeActionKind::REFACTOR_REWRITE),
-                                diagnostics: None,
-                                edit: Some(WorkspaceEdit::new(changes)),
-                                command: None,
-                                is_preferred: Some(false),
-                                disabled: None,
-                                data: None,
-                            }));
-                        } else {
-                            return Ok(None);
-                        }
-                    }
-                    _ => {
-                        return Ok(None);
-                    }
-                }
-                debug!("code-action: {:?}", duration.elapsed());
-                return Ok(Some(code_action));
-            }
-        }
-        unimplemented!() // TODO
+        let mut code_action_result = CodeActionResponse::new();
+        get_function_call_action(&self, params.clone(), &mut code_action_result).await?;
+        extract_component_action(&self, params, &mut code_action_result).await?;
+        Ok(Some(code_action_result))
     }
 
     async fn execute_command(&self, _params: ExecuteCommandParams) -> Result<Option<Value>> {
