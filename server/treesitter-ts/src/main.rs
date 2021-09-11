@@ -1,4 +1,3 @@
-use std::ops::Mul;
 use std::{fmt::Debug, path::PathBuf, time::Instant};
 use std::{
     fs::read_to_string,

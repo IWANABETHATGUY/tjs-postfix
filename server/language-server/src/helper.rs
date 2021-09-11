@@ -1,6 +1,6 @@
 use log::debug;
+use lsp_text_document::lsp_types::{Position, Range, TextDocumentContentChangeEvent};
 use lsp_text_document::FullTextDocument;
-use lsp_text_document::lsp_types::TextDocumentContentChangeEvent;
 use tree_sitter::{InputEdit, Node, Point};
 
 pub fn get_tree_sitter_edit_from_change(
@@ -72,4 +72,16 @@ pub fn pretty_print(source_code: &str, root: Node, level: usize) {
         let node = root.child(i).unwrap();
         pretty_print(source_code, node, level + 1);
     }
+}
+
+pub fn generate_lsp_range(
+    start_row: u32,
+    start_column: u32,
+    end_row: u32,
+    end_column: u32,
+) -> Range {
+    Range::new(
+        Position::new(start_row, start_column),
+        Position::new(end_row, end_column),
+    )
 }

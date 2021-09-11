@@ -21,6 +21,8 @@ mod query_pattern;
 pub use backend::Backend;
 use document_symbol::get_component_symbol;
 
+use crate::helper::generate_lsp_range;
+
 #[lspower::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
@@ -157,21 +159,18 @@ impl LanguageServer for Backend {
                     {
                         let start_object_node = sp.child_by_field_name("object");
                         let end_object_node = ep.child_by_field_name("object");
-                        if let (Some(start), Some(end)) = (start_object_node, end_object_node) {
-                            let replace_range = Range::new(
-                                Position::new(
-                                    ep.start_position().row as u32,
-                                    ep.start_position().column as u32,
-                                ),
-                                Position::new(
-                                    ep.end_position().row as u32,
-                                    ep.end_position().column as u32,
-                                ),
+                        if let (Some(start), Some(_)) = (start_object_node, end_object_node) {
+                            let replace_range = generate_lsp_range(
+                                ep.start_position().row as u32,
+                                ep.start_position().column as u32,
+                                ep.end_position().row as u32,
+                                ep.end_position().column as u32,
                             );
                             let document_source = document.rope.to_string();
                             let object_source_code = &document_source[start.byte_range()];
 
-                            let function = &document_source[start_node.start_byte()..end_node.end_byte()];
+                            let function =
+                                &document_source[start_node.start_byte()..end_node.end_byte()];
 
                             let replaced_code = format!("{}({})", function, object_source_code);
 
@@ -242,17 +241,13 @@ impl LanguageServer for Backend {
                 .content_changes
                 .into_iter()
                 .map(|change| {
-                    let range = change.range.and_then(|range| {
-                        Some(lsp_types::Range {
-                            start: lsp_types::Position::new(
-                                range.start.line as u32,
-                                range.start.character as u32,
-                            ),
-                            end: lsp_types::Position::new(
-                                range.end.line as u32,
-                                range.end.character as u32,
-                            ),
-                        })
+                    let range = change.range.map(|range| {
+                        generate_lsp_range(
+                            range.start.line as u32,
+                            range.start.character as u32,
+                            range.end.line as u32,
+                            range.end.character as u32,
+                        )
                     });
                     lsp_types::TextDocumentContentChangeEvent {
                         range,
@@ -353,12 +348,11 @@ impl LanguageServer for Backend {
                                     break;
                                 }
                             }
-                            let replace_range = Range::new(
-                                Position::new(
-                                    node.start_position().row as u32,
-                                    node.start_position().column as u32,
-                                ),
-                                Position::new(dot.line, dot.character),
+                            let replace_range = generate_lsp_range(
+                                node.start_position().row as u32,
+                                node.start_position().column as u32,
+                                dot.line,
+                                dot.character,
                             );
                             let source_code = &document.rope.to_string()[node.byte_range()];
 
