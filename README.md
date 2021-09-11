@@ -23,5 +23,6 @@
 2. codeAction
 ![codeAction](https://raw.githubusercontent.com/IWANABETHATGUY/tjs-postfix/master/assets/codeAction.gif)
 3. extract-component
-https://user-images.githubusercontent.com/17974631/132954292-8451fcc4-394a-4e2b-8132-1541e581afd4.mp4
-
+![extract-component](https://github.com/IWANABETHATGUY/tjs-postfix/blob/master/assets/extract-component.gif?raw=true)
+4. component-symbol
+![component-symbol](https://github.com/IWANABETHATGUY/tjs-postfix/blob/master/assets/component-symbol.gif?raw=true)
