@@ -11,3 +11,5 @@ vsc-extension-quickstart.md
 server/**
 node_modules
 client/**
+ts-server/**
+assets/**
