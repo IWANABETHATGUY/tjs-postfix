@@ -5,8 +5,8 @@ export type CodeActionHandler = Parameters<LanguageClientOptions["middleware"]["
 export type ActionHandlerReturnType = ReturnType<LanguageClientOptions["middleware"]["provideCodeActions"]>;
 
 export const getCodeActionFromServer: (
-  ...args: [{ tjsc: LanguageClient; tsc: LanguageClient }, ...Partial<CodeActionHandler>]
-) => Promise<any> = ({ tjsc, tsc }, doc, range, context, token) => {
+  ...args: [{ tjsc: LanguageClient; }, ...Partial<CodeActionHandler>]
+) => Promise<any> = ({ tjsc,  }, doc, range, context, token) => {
   const params: CodeActionParams = {
     textDocument: tjsc.code2ProtocolConverter.asTextDocumentIdentifier(doc),
     range: tjsc.code2ProtocolConverter.asRange(range),
@@ -21,8 +21,8 @@ export const getCodeActionFromServer: (
 };
 
 export const codeActionProvider: (
-  ...args: [{ tjsc: LanguageClient; tsc: LanguageClient }, ...Partial<CodeActionHandler>]
-) => ActionHandlerReturnType = async ({ tjsc, tsc }, doc, range, context, token) => {
+  ...args: [{ tjsc: LanguageClient; }, ...Partial<CodeActionHandler>]
+) => ActionHandlerReturnType = async ({ tjsc,  }, doc, range, context, token) => {
   if (range.isSingleLine && range.end.character - range.start.character < 3) {
     return null;
   }
@@ -30,7 +30,7 @@ export const codeActionProvider: (
   let result = [];
   try {
     let res = await Promise.race([
-      getCodeActionFromServer({ tjsc, tsc }, doc, range, context, token),
+      getCodeActionFromServer({ tjsc,  }, doc, range, context, token),
       new Promise((resolve, reject) => {
         setTimeout(() => {
           resolve([]);
@@ -44,7 +44,7 @@ export const codeActionProvider: (
       const normalizedItem = tjsc.protocol2CodeConverter.asCodeAction(item);
       if (normalizedItem.title === "extract react component") {
         try {
-          await convertExtractComponentAction(normalizedItem, doc, tsc);
+          await convertExtractComponentAction(normalizedItem, doc, );
         } catch {}
       }
       result.push(normalizedItem);
@@ -82,7 +82,7 @@ export interface ExtractComponentData {
   endPosition: Position;
 }
 
-async function convertExtractComponentAction(normalizedItem: CodeAction, doc: TextDocument, tsc: LanguageClient) {
+async function convertExtractComponentAction(normalizedItem: CodeAction, doc: TextDocument,) {
   const data: ExtractComponentData = (normalizedItem as any).data;
   if (!data) {
     return normalizedItem;
@@ -108,15 +108,13 @@ function Component1({${identifierNodeList.map(item => item.name).join(",")}}) {
 `;
     edit.insert(doc.uri, endPosition, componentFunction);
   } else {
-    // await new Promise(resolve => {
-    //   setTimeout(resolve, 500);
-    // });
-    let typeList = await getTypeFromTypescriptService(
-      tsc,
-      doc.uri.fsPath,
-      identifierNodeList.map(item => item.start)
-    );
+    // let typeList = await getTypeFromTypescriptService(
+    //   tsc,
+    //   doc.uri.fsPath,
+    //   identifierNodeList.map(item => item.start)
+    // );
     let idList = identifierNodeList.map(item => item.name);
+    let typeList = identifierNodeList.map(item => 'any');
 
     let componentFunction = `
     function Component1({${identifierNodeList.map(item => item.name).join(",")}}: ${generateTypeOfComponentParams(
@@ -126,7 +124,6 @@ function Component1({${identifierNodeList.map(item => item.name).join(",")}}) {
       return ${jsxElementText}
     }
     `;
-    normalizedItem.title += componentFunction;
     edit.insert(doc.uri, endPosition, componentFunction);
   }
   let componentInvoke = `<Component1 ${identifierNodeList.map(item => `${item.name}={${item.name}}`).join(" ")}/>`;

@@ -46,17 +46,7 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                 }),
 
-                code_action_provider: Some(CodeActionProviderCapability::Options(
-                    CodeActionOptions {
-                        code_action_kinds: Some(vec![
-                            CodeActionKind::REFACTOR_REWRITE,
-                        ]),
-                        work_done_progress_options: WorkDoneProgressOptions {
-                            work_done_progress: Some(true),
-                        },
-                        resolve_provider: Some(true),
-                    },
-                )),
+                code_action_provider:Some(lsp_text_document::lsp_types::CodeActionProviderCapability::Simple(true)) ,
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace: Some(WorkspaceServerCapabilities {
                     workspace_folders: Some(WorkspaceFoldersServerCapabilities {

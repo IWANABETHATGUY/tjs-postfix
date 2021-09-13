@@ -150,42 +150,43 @@ console.timeEnd('${result}')`
 
   // If the extension is launched in debug mode then the debug server options are used
   // Otherwise the run options are used
-  const typescriptServerOptions: ServerOptions = {
-    run: { module: typescriptServerModule, transport: TransportKind.ipc },
-    debug: {
-      module: typescriptServerModule,
-      transport: TransportKind.ipc,
-      options: debugOptions,
-    },
-  };
+  // TODO: enable ts language server
+  // const typescriptServerOptions: ServerOptions = {
+  //   run: { module: typescriptServerModule, transport: TransportKind.ipc },
+  //   debug: {
+  //     module: typescriptServerModule,
+  //     transport: TransportKind.ipc,
+  //     options: debugOptions,
+  //   },
+  // };
 
   // Options to control the language client
-  const typescriptClientOptions: LanguageClientOptions = {
-    // Register the server for plain text documents
-    documentSelector: [
-      { scheme: "file", language: "typescript" },
-      { scheme: "file", language: "typescriptreact" },
-    ],
-    synchronize: {
-      // Notify the server about file changes to '.clientrc files contained in the workspace
-      fileEvents: workspace.createFileSystemWatcher("**/.clientrc"),
-    },
-  };
-  let tsClient = new LanguageClient(
-    "tjs-postfix-ts",
-    "TJS Language Server ts",
-    typescriptServerOptions,
-    typescriptClientOptions
-  );
+  // const typescriptClientOptions: LanguageClientOptions = {
+  //   // Register the server for plain text documents
+  //   documentSelector: [
+  //     { scheme: "file", language: "typescript" },
+  //     { scheme: "file", language: "typescriptreact" },
+  //   ],
+  //   synchronize: {
+  //     // Notify the server about file changes to '.clientrc files contained in the workspace
+  //     fileEvents: workspace.createFileSystemWatcher("**/.clientrc"),
+  //   },
+  // };
+  // let tsClient = new LanguageClient(
+  //   "tjs-postfix-ts",
+  //   "TJS Language Server ts",
+  //   typescriptServerOptions,
+  //   typescriptClientOptions
+  // );
 
   context.subscriptions.push(
     commands.registerCommand("tjs-postfix.restart-language-server", async (uri, range, content) => {
       try {
         client.stop();
-        tsClient.stop();
+        // tsClient.stop();
         setTimeout(() => {
           client.start();
-          tsClient.start();
+          // tsClient.start();
         }, 1000);
       } catch (e) {
         console.error(e);
@@ -194,7 +195,8 @@ console.timeEnd('${result}')`
   );
 
   client.clientOptions.middleware.provideCodeActions = async (doc, range, context, token) => {
-    return codeActionProvider({ tjsc: client, tsc: tsClient }, doc, range, context, token);
+    // return codeActionProvider({ tjsc: client, tsc: tsClient }, doc, range, context, token);
+    return codeActionProvider({ tjsc: client,}, doc, range, context, token);
   };
   // Create the language client and start the client.
   // Start the client. This will also launch the server
@@ -209,7 +211,7 @@ console.timeEnd('${result}')`
   });
 
   client.start();
-  tsClient.start();
+  // tsClient.start();
 }
 
 export function deactivate(): Thenable<void> | undefined {
