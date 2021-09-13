@@ -160,10 +160,18 @@ pub async fn extract_component_action(
             let jsx_element_node = node;
             let identifier_node_list = identifier_list
                 .into_iter()
-                .map(|node| {
+                .filter_map(|node| {
+                    let parent = node.parent();
+                    match parent {
+                        Some(p) if p.kind() == "jsx_opening_element" || p.kind() == "jsx_closing_element" => {
+                            return None;
+                        }
+                        None => return None,
+                        _ => {}
+                    };
                     let sp = node.start_position();
                     let ep = node.end_position();
-                    IdentifierNode {
+                    Some(IdentifierNode {
                         start: node.start_byte(),
                         end: node.end_byte(),
                         range: generate_lsp_range(
@@ -173,7 +181,7 @@ pub async fn extract_component_action(
                             ep.column as u32,
                         ),
                         name: node.utf8_text(source.as_bytes()).unwrap().to_string(),
-                    }
+                    })
                 })
                 .collect::<Vec<_>>();
             let jsx_ele_sp = jsx_element_node.start_position();
