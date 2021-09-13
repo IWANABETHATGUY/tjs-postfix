@@ -15,6 +15,7 @@ use serde_json::Value;
 
 mod backend;
 mod code_action;
+mod completion;
 mod document_symbol;
 mod helper;
 mod notification;
@@ -25,7 +26,7 @@ use document_symbol::get_component_symbol;
 
 use crate::helper::generate_lsp_range;
 use code_action::{extract_component_action, get_function_call_action};
-
+use completion::get_react_completion;
 #[lspower::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
@@ -46,7 +47,9 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                 }),
 
-                code_action_provider:Some(lsp_text_document::lsp_types::CodeActionProviderCapability::Simple(true)) ,
+                code_action_provider: Some(
+                    lsp_text_document::lsp_types::CodeActionProviderCapability::Simple(true),
+                ),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace: Some(WorkspaceServerCapabilities {
                     workspace_folders: Some(WorkspaceFoldersServerCapabilities {
@@ -243,6 +246,7 @@ impl LanguageServer for Backend {
                 if before_string.is_none() {
                     return Ok(None);
                 }
+                let parser = self.parser.lock().await;
                 let map = self.parse_tree_map.lock().await;
                 let tree = map.get(&params.text_document_position.text_document.uri.to_string());
                 match tree {
@@ -281,16 +285,16 @@ impl LanguageServer for Backend {
                                 dot.line,
                                 dot.character,
                             );
-                            let source_code = &document.rope.to_string()[node.byte_range()];
+                            let source = document.rope.to_string();
 
-                            let mut template_item_list = self.get_template_completion_item_list(
-                                source_code.to_string(),
-                                &replace_range,
+                            let res =
+                                get_react_completion(&source[node.byte_range()], &source, &replace_range, tree, parser);
+                            let mut template_item_list =
+                                self.get_template_completion_item_list(&source[node.byte_range()], &replace_range);
+                            template_item_list.extend(
+                                self.get_snippet_completion_item_list(&source[node.byte_range()], &replace_range),
                             );
-                            template_item_list.extend(self.get_snippet_completion_item_list(
-                                source_code.to_string(),
-                                &replace_range,
-                            ));
+                            template_item_list.extend(res);
                             template_item_list.push(CompletionItem::new_simple(
                                 format!("{:?}", start.elapsed()),
                                 format!("{:?}: {:?}", node, Range::default()),

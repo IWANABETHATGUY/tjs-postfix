@@ -69,7 +69,7 @@ impl Backend {
 
     pub(crate) fn get_template_completion_item_list(
         &self,
-        source_code: String,
+        source_code: &str,
         replace_range: &Range,
     ) -> Vec<CompletionItem> {
         if let Ok(template_list) = self.postfix_template_list.lock() {
@@ -97,7 +97,7 @@ impl Backend {
 
     pub(crate) fn get_snippet_completion_item_list(
         &self,
-        source_code: String,
+        source_code: &str,
         replace_range: &Range,
     ) -> Vec<CompletionItem> {
         let snippet_list = vec![
@@ -144,16 +144,6 @@ impl Backend {
                 label: String::from("const"),
                 detail: String::from("const name = expr"),
                 replace_string_generator: Box::new(|name| format!("const ${{0}} = {}", name)),
-            },
-            SnippetCompletionItem {
-                label: String::from("state"),
-                detail: String::from("const [<expr>, set<expr>] = expr"),
-                replace_string_generator: Box::new(|name| {
-                    format!(
-                        "const [{}, set{}] = useState(${{0}})",
-                        name, name.to_pascal_case()
-                    )
-                }),
             },
             SnippetCompletionItem {
                 label: String::from("cast"),
@@ -218,7 +208,7 @@ impl Backend {
                 let mut item = CompletionItem::new_simple(snippet.label, snippet.detail);
                 item.insert_text_format = Some(InsertTextFormat::Snippet);
                 item.kind = Some(CompletionItemKind::Snippet);
-                let replace_string = (snippet.replace_string_generator)(source_code.clone());
+                let replace_string = (snippet.replace_string_generator)(source_code.to_string());
                 item.documentation = Some(Documentation::String(replace_string.clone()));
 
                 item.insert_text = Some(replace_string);

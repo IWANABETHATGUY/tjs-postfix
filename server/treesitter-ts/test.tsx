@@ -894,5 +894,5 @@ export type TypeDriveSortInfo = {
   type: SortFunctionMapType;
   order: SortOrderType;
 };
-let a = <div></div>;
-export type DriveActions = typeof actions;
+let a = <Component1 />;
+

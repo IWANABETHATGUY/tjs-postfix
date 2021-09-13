@@ -19,3 +19,16 @@ pub const LOCAL_VARIABLE_QUERY: &str = r#"
   name: (identifier) @a
 ) 
             "#;
+
+pub const REACT_NAME_SPACE_IMPORT: &str = r#"
+(import_statement
+  (import_clause
+    (namespace_import (identifier) @namespace)
+  )
+  source: (string
+    (string_fragment) @source
+  )
+  
+  (#match? @source "react")
+)
+"#;
