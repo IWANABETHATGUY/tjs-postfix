@@ -163,7 +163,7 @@ pub async fn extract_component_action(
                 .filter_map(|node| {
                     let parent = node.parent();
                     match parent {
-                        Some(p) if p.kind() == "jsx_opening_element" || p.kind() == "jsx_closing_element" => {
+                        Some(p) if p.kind() == "jsx_opening_element" || p.kind() == "jsx_closing_element" || p.kind() == "nested_identifier" => {
                             return None;
                         }
                         None => return None,
