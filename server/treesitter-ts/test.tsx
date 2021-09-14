@@ -886,7 +886,12 @@ export type TaskInfo = {
   linkExpire: string; // 保存在数据库，提供刷新链接用
   token: string;
 };
+const a = (a, b, c) => {
 
+};
+const test = function result() {
+  
+};
 type LiteralKeyMap<T extends string, S> = { [K in T]: S };
 export type CollapseItemTabType = 'trash' | 'drive';
 export type DriveMutations = typeof mutations;
@@ -894,5 +899,8 @@ export type TypeDriveSortInfo = {
   type: SortFunctionMapType;
   order: SortOrderType;
 };
-let a = <Component1 />;
 
+
+function Component() {
+
+}

@@ -12,7 +12,7 @@ use lspower::jsonrpc::Result;
 use serde::{Deserialize, Serialize};
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor, Tree};
 
-use crate::{helper::generate_lsp_range, Backend};
+use crate::{helper::generate_lsp_range, query_pattern::FUNCTION_LIKE_DECLARATION, Backend};
 #[derive(Serialize, Deserialize)]
 pub struct IdentifierNode {
     start: usize,
@@ -26,6 +26,7 @@ pub struct IdentifierNode {
 pub struct ExtractComponentData {
     jsx_element_range: Range,
     identifier_node_list: Vec<IdentifierNode>,
+    function_name: String,
 }
 pub async fn get_function_call_action(
     back_end: &Backend,
@@ -163,7 +164,11 @@ pub async fn extract_component_action(
                 .filter_map(|node| {
                     let parent = node.parent();
                     match parent {
-                        Some(p) if p.kind() == "jsx_opening_element" || p.kind() == "jsx_closing_element" || p.kind() == "nested_identifier" => {
+                        Some(p)
+                            if p.kind() == "jsx_opening_element"
+                                || p.kind() == "jsx_closing_element"
+                                || p.kind() == "nested_identifier" =>
+                        {
                             return None;
                         }
                         None => return None,
@@ -186,6 +191,8 @@ pub async fn extract_component_action(
                 .collect::<Vec<_>>();
             let jsx_ele_sp = jsx_element_node.start_position();
             let jsx_ele_ep = jsx_element_node.end_position();
+            let function_name =
+                get_function_name_from_program(parser.language().unwrap(), source.as_bytes(), root);
             code_action.push(CodeActionOrCommand::CodeAction(CodeAction {
                 title: "extract react component".to_string(),
                 kind: Some(CodeActionKind::REFACTOR_REWRITE),
@@ -203,6 +210,7 @@ pub async fn extract_component_action(
                             jsx_ele_ep.row as u32,
                             jsx_ele_ep.column as u32,
                         ),
+                        function_name,
                     })
                     .unwrap(),
                 ),
@@ -249,4 +257,29 @@ fn get_identifier_from_jsx_element<'a, 'b: 'a>(
         }
     }
     return vec;
+}
+
+fn get_function_name_from_program<'b>(lang: Language, source: &[u8], root: Node<'b>) -> String {
+    let jsx_query = Query::new(lang, FUNCTION_LIKE_DECLARATION).unwrap();
+
+    let mut cursor = QueryCursor::new();
+    // pretty_print(&source, node, 0);
+    let jsx_matches = cursor.matches(&jsx_query, root, source);
+    let mut id_set = HashSet::new();
+    for item in jsx_matches {
+        for cap in item.captures {
+            if let Ok(id) = cap.node.utf8_text(source) {
+                id_set.insert(id.to_string());
+            }
+        }
+    }
+    let mut i = 0;
+    loop {
+        let name = format!("Component{}", i);
+        if id_set.contains(&name) {
+            i += 1;
+        } else {
+            return name;
+        }
+    }
 }

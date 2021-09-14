@@ -5,8 +5,8 @@ export type CodeActionHandler = Parameters<LanguageClientOptions["middleware"]["
 export type ActionHandlerReturnType = ReturnType<LanguageClientOptions["middleware"]["provideCodeActions"]>;
 
 export const getCodeActionFromServer: (
-  ...args: [{ tjsc: LanguageClient; }, ...Partial<CodeActionHandler>]
-) => Promise<any> = ({ tjsc,  }, doc, range, context, token) => {
+  ...args: [{ tjsc: LanguageClient }, ...Partial<CodeActionHandler>]
+) => Promise<any> = ({ tjsc }, doc, range, context, token) => {
   const params: CodeActionParams = {
     textDocument: tjsc.code2ProtocolConverter.asTextDocumentIdentifier(doc),
     range: tjsc.code2ProtocolConverter.asRange(range),
@@ -21,8 +21,8 @@ export const getCodeActionFromServer: (
 };
 
 export const codeActionProvider: (
-  ...args: [{ tjsc: LanguageClient; }, ...Partial<CodeActionHandler>]
-) => ActionHandlerReturnType = async ({ tjsc,  }, doc, range, context, token) => {
+  ...args: [{ tjsc: LanguageClient }, ...Partial<CodeActionHandler>]
+) => ActionHandlerReturnType = async ({ tjsc }, doc, range, context, token) => {
   if (range.isSingleLine && range.end.character - range.start.character < 3) {
     return null;
   }
@@ -30,7 +30,7 @@ export const codeActionProvider: (
   let result = [];
   try {
     let res = await Promise.race([
-      getCodeActionFromServer({ tjsc,  }, doc, range, context, token),
+      getCodeActionFromServer({ tjsc }, doc, range, context, token),
       new Promise((resolve, reject) => {
         setTimeout(() => {
           resolve([]);
@@ -44,7 +44,7 @@ export const codeActionProvider: (
       const normalizedItem = tjsc.protocol2CodeConverter.asCodeAction(item);
       if (normalizedItem.title === "extract react component") {
         try {
-          await convertExtractComponentAction(normalizedItem, doc, );
+          await convertExtractComponentAction(normalizedItem, doc);
         } catch {}
       }
       result.push(normalizedItem);
@@ -77,12 +77,13 @@ interface IdentifierNode {
 export interface ExtractComponentData {
   identifierNodeList: IdentifierNode[];
   jsxElementRange: Range;
+  functionName: string;
   path?: string;
   jsxElementText?: string;
   endPosition: Position;
 }
 
-async function convertExtractComponentAction(normalizedItem: CodeAction, doc: TextDocument,) {
+async function convertExtractComponentAction(normalizedItem: CodeAction, doc: TextDocument) {
   const data: ExtractComponentData = (normalizedItem as any).data;
   if (!data) {
     return normalizedItem;
@@ -90,6 +91,7 @@ async function convertExtractComponentAction(normalizedItem: CodeAction, doc: Te
   const {
     identifierNodeList,
     jsxElementRange: { end, start },
+    functionName,
   } = data;
   data.path = doc.uri.fsPath;
   const normalizedJsxElementRange = new ClientRange(
@@ -102,7 +104,7 @@ async function convertExtractComponentAction(normalizedItem: CodeAction, doc: Te
   let jsxElementText = doc.getText(normalizedJsxElementRange);
   if (doc.languageId === "javascript" || doc.languageId === "javascriptreact") {
     let componentFunction = `
-function Component1({${identifierNodeList.map(item => item.name).join(",")}}) {
+function ${functionName}({${generateParametersForJsx(identifierNodeList)}}) {
   return ${jsxElementText}
 } 
 `;
@@ -114,19 +116,16 @@ function Component1({${identifierNodeList.map(item => item.name).join(",")}}) {
     //   identifierNodeList.map(item => item.start)
     // );
     let idList = identifierNodeList.map(item => item.name);
-    let typeList = identifierNodeList.map(item => 'any');
+    let typeList = identifierNodeList.map(item => "any");
 
     let componentFunction = `
-    function Component1({${identifierNodeList.map(item => item.name).join(",")}}: ${generateTypeOfComponentParams(
-      typeList,
-      idList
-    )}) {
+    function ${functionName}(${generateParametersForTsx(identifierNodeList, typeList, idList)}) {
       return ${jsxElementText}
     }
     `;
     edit.insert(doc.uri, endPosition, componentFunction);
   }
-  let componentInvoke = `<Component1 ${identifierNodeList.map(item => `${item.name}={${item.name}}`).join(" ")}/>`;
+  let componentInvoke = `<${functionName} ${identifierNodeList.map(item => `${item.name}={${item.name}}`).join(" ")}/>`;
   edit.replace(doc.uri, normalizedJsxElementRange, componentInvoke);
   normalizedItem.edit = edit;
   normalizedItem.command = {
@@ -139,6 +138,10 @@ function Component1({${identifierNodeList.map(item => item.name).join(",")}}) {
       },
     ],
   };
+}
+
+function generateParametersForJsx(identifierNodeList: IdentifierNode[]) {
+  return identifierNodeList.length ? identifierNodeList.map(item => item.name).join(",") : "";
 }
 
 function getTypeFromTypescriptService(tsc: LanguageClient, path: string, posList: number[]): Promise<string[]> {
@@ -160,4 +163,10 @@ function generateTypeOfComponentParams(typeList: string[], idList: string[]) {
     typeInner += `${idList[i]}:${typeList[i] || "any"},`;
   }
   return `{${typeInner}}`;
+}
+
+function generateParametersForTsx(identifierNodeList: IdentifierNode[], typeList: string[], idList: string[]) {
+  return identifierNodeList.length
+    ? `{${identifierNodeList.map(item => item.name).join(",")}}: ${generateTypeOfComponentParams(typeList, idList)}`
+    : "";
 }

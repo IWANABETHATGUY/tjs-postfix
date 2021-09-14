@@ -32,3 +32,23 @@ pub const REACT_NAME_SPACE_IMPORT: &str = r#"
   (#match? @source "react")
 )
 "#;
+
+pub const FUNCTION_LIKE_DECLARATION: &str = r#"
+(program
+    [
+        (function_declaration
+            name: (identifier) @c
+        )
+        
+        (_
+            (variable_declarator
+                name: (identifier) @c
+                value: [
+                    (function)
+                    (arrow_function)
+                ]
+            )
+        )
+    ]
+)
+    "#;
