@@ -6,7 +6,7 @@ use std::{
 use tjs_language_server::Backend;
 use tokio::sync::Mutex;
 
-use tree_sitter_plugin::tree_sitter_tsx;
+use tree_sitter_typescript::language_tsx;
 
 #[tokio::main]
 async fn main() {
@@ -15,7 +15,7 @@ async fn main() {
     let stdout = tokio::io::stdout();
 
     let (service, messages) = LspService::new(|client| {
-        let language = unsafe { tree_sitter_tsx() };
+        let language = unsafe { language_tsx() };
         let mut parser = tree_sitter::Parser::new();
         parser.set_language(language).unwrap();
         let parser = Mutex::new(parser);

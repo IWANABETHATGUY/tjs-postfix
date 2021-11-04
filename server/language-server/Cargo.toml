@@ -23,4 +23,5 @@ tokio = { version = "1.3", features = [
     "time",
 ] }
 tree-sitter = "0.20.0"
-tree-sitter-plugin = { path = "../tree-sitter-plugin" }
+tree-sitter-typescript = "0.20.0"
+tree-sitter-scss = { git = "https://github.com/IWANABETHATGUY/tree-sitter-scss" }
