@@ -612,7 +612,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tree-sitter",
- "treesitter-ts",
+ "tree-sitter-plugin",
 ]
 
 [[package]]
@@ -674,7 +674,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "treesitter-ts"
+name = "tree-sitter-plugin"
 version = "0.1.0"
 dependencies = [
  "cc",

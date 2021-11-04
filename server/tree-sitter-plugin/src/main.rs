@@ -7,7 +7,7 @@ use std::{
 use tree_sitter::{
     Language, Node, Parser, Query, QueryCursor, QueryMatch, TextProvider, TreeCursor,
 };
-use treesitter_ts::{tree_sitter_tsx, tree_sitter_typescript};
+use tree_sitter_plugin::{tree_sitter_tsx, tree_sitter_typescript};
 
 fn main() {
     let external_array = vec!["window"];

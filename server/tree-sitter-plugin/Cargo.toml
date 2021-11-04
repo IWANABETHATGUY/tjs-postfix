@@ -1,5 +1,5 @@
 [package]
-name = "treesitter-ts"
+name = "tree-sitter-plugin"
 version = "0.1.0"
 authors = ["IWANABETHATGUY <974153916@qq.com>"]
 edition = "2018"

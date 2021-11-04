@@ -6,7 +6,7 @@ use std::{
 use tjs_language_server::Backend;
 use tokio::sync::Mutex;
 
-use treesitter_ts::tree_sitter_tsx;
+use tree_sitter_plugin::tree_sitter_tsx;
 
 #[tokio::main]
 async fn main() {
