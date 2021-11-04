@@ -5,68 +5,22 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tree_sitter::{
-    Language, Node, Parser, Query, QueryCursor, QueryMatch, TextProvider, TreeCursor,
+    Language, Node, Parser, 
 };
-use tree_sitter_plugin::{tree_sitter_tsx, tree_sitter_typescript};
+use tree_sitter_plugin::{ tree_sitter_scss,tree_sitter_tsx, tree_sitter_typescript};
 
 fn main() {
-    let external_array = vec!["window"];
-    let language = unsafe { tree_sitter_tsx() };
-    let mut parser = Parser::new();
-    parser.set_language(language).unwrap();
-    let parser = Arc::new(Mutex::new(parser));
-    let source = read_to_string("test.tsx").unwrap();
-    let mut parser = parser.lock().unwrap();
+    // let language = unsafe { tree_sitter_scss() };
+    // let mut parser = Parser::new();
+    // parser.set_language(language).unwrap();
+    // let source = include_str!("../assets/small.scss");
     // let start = Instant::now();
-    let jsx_pattern = r#"
-(program
-    [
-        (function_declaration
-            name: (identifier) @c
-        )
-        
-        (_
-            (variable_declarator
-                name: (identifier) @c
-                value: [
-                    (function)
-                    (arrow_function)
-                ]
-            )
-        )
-    ]
-)
-    "#;
-    let tree = parser.parse(&source, None).unwrap();
-    let time = Instant::now();
-    let jsx_query = Query::new(language, &jsx_pattern).unwrap();
+    // let tree = parser.parse(&source, None).unwrap();
+    // let time = Instant::now();
 
-    let mut cursor = QueryCursor::new();
-    let node = tree.root_node();
+    // let node = tree.root_node();
     // pretty_print(&source, node, 0);
-    let mut jsx_matches = cursor.matches(&jsx_query, node, source.as_bytes());
-    
-    for item in jsx_matches {
-        for cap in item.captures {
-            println!("{}", cap.node.utf8_text(source.as_bytes()).unwrap());
-        }
-    }
-    // let jsx_element = first_jsx_element.captures.iter().next().unwrap().node;
-
-    // let res = cursor.matches(&jsx_expression_query, jsx_element, source.as_bytes());
-    // for item in res {
-    //     for cap in item.captures {
-    //         let mut cursor = QueryCursor::new();
-    //         let identifier_matches = cursor.matches(&local_query, cap.node, "".as_bytes());
-    //         for id_match in identifier_matches {
-    //             for inner_cap in id_match.captures {
-    //                 println!("{}, ", inner_cap.node.utf8_text(source.as_bytes()).unwrap());
-    //             }
-    //         }
-    //     }
-    // }
-
-    println!("{:?}", time.elapsed());
+    // println!("{:?}", time.elapsed());
 }
 
 fn pretty_print(source_code: &str, root: Node, level: usize) {
