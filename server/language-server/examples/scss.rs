@@ -3,18 +3,20 @@ use std::time::Instant;
 use tree_sitter::{Language, Node, Parser};
 // use cssparser::{Parser as CssParser, ParserInput, Token};
 fn main() {
-    let source_code = include_str!("../assets/com.scss");
+    let source_code = include_str!("../assets/bootstrap.css");
     let start = Instant::now();
     let mut parser = Parser::new();
     let language = tree_sitter_scss::language();
     parser.set_language(language).unwrap();
     let tree = parser.parse(source_code, None).unwrap();
+    println!("{:?}", start.elapsed());
     let mut position_list = vec![];
     let root_node = tree.root_node();
     println!("{:?}", root_node.has_error());
+    let start = Instant::now();
     traverse(root_node, &mut vec![], source_code, &mut position_list);
     println!("{:?}", start.elapsed());
-    println!("{:?}", position_list);
+    // println!("{:?}", position_list);
     // let parser = CssParser::new(&mut ParserInput::new(source_code));
 }
 
@@ -60,14 +62,14 @@ fn traverse(
                             };
                         }
                         _ => {
-                            unimplemented!() // TODO
+                            // unimplemented!() // TODO
                         }
                     }
                 }
             } else {
                 return;
             }
-            println!("{:?}", new_top);
+            // println!("{:?}", new_top);
             trace_stack.push(new_top);
             let block = root.child(1);
             if let Some(block) = block {
