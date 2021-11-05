@@ -1,0 +1,170 @@
+.guide {
+  &-container {
+    position: relative;
+    display: flex;
+    font-size: 14px;
+    margin: 8px 12px;
+    padding: 16px 0 16px 16px;
+    width: 100vw;
+    height: 180px;
+    border-radius: 6px;
+    flex-direction: column;
+  }
+
+  &-title-row {
+    display: flex;
+    justify-content: space-between;
+    height: 28px;
+    margin-bottom: 16px;
+  }
+
+  &-title-main {
+    font-family: PingFang SC;
+    font-style: normal;
+    font-weight: 500;
+    font-size: 17px;
+    line-height: 24px;
+
+    color: #222;
+  }
+
+  &-order-match-schedule {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 96px;
+    height: 28px;
+    margin-right: 16px;
+    background: #e9f3ff;
+    border-radius: 37px;
+  }
+
+  &-order-match-schedule-inner {
+    font-family: PingFang SC;
+    font-style: normal;
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 16px;
+    color: #4b91ff;
+  }
+
+  &-preview-list {
+    display: flex;
+    flex-direction: row;
+    height: 104px;
+  }
+
+  &-preview-card {
+    display: flex;
+    position: relative;
+    width: 174px;
+
+    background: #f6fbff;
+    border-radius: 4px;
+    margin-right: 8px;
+    overflow: visible;
+    flex-direction: row;
+  }
+
+  &-preview-photo {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 112px;
+    height: 104px;
+  }
+  &-preview-photo-athlete {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 76px;
+    height: 115px;
+  }
+
+  // below is useless
+
+  &-overlay {
+    position: absolute;
+    border-radius: 6px;
+    width: 172px;
+    height: 47px;
+    right: 0;
+    top: 0;
+  }
+
+  &-mobile {
+    display: block;
+    width: 60px;
+    height: 17px;
+    margin-bottom: 12px;
+  }
+
+  &-detail-sub {
+    height: 17px;
+    margin-top: 7px;
+    font-family: PingFang SC;
+    font-style: normal;
+    font-weight: normal;
+    font-size: 12px;
+    line-height: 17px;
+
+    /* identical to box height */
+
+    color: #999;
+
+    opacity: 0.9;
+  }
+}
+
+.medal-detail-list {
+}
+
+.medal-detail-item {
+  margin-left: 8px;
+}
+
+.medal-detail-item-number {
+  margin-left: 3px;
+  font-family: Byte Number;
+  font-size: 14px;
+  line-height: 20px;
+
+  /* identical to box height, or 143% */
+
+  text-align: center;
+
+  color: #fff;
+}
+
+.medal-detail-item-gold {
+  height: 22px;
+  width: 22px;
+  background-size: cover;
+  background-image: url('../../assets/medal-ranking/gold.png');
+}
+
+.medal-detail-item-silver {
+  height: 22px;
+  width: 22px;
+  background-size: cover;
+  background-image: url('../../assets/medal-ranking/silver.png');
+}
+
+.medal-detail-item-bronze {
+  height: 22px;
+  width: 22px;
+  background-size: cover;
+  background-image: url('../../assets/medal-ranking/bronze.png');
+}
+
+.medal-gold-text {
+  color: #df6512;
+}
+
+.medal-silver-text {
+  color: #7d7fc6;
+}
+
+.medal-bronze-text {
+  color: #df6512;
+}

@@ -612,7 +612,8 @@ dependencies = [
  "serde_json",
  "tokio",
  "tree-sitter",
- "tree-sitter-plugin",
+ "tree-sitter-scss",
+ "tree-sitter-typescript",
 ]
 
 [[package]]
@@ -676,6 +677,25 @@ dependencies = [
 [[package]]
 name = "tree-sitter-plugin"
 version = "0.1.0"
+dependencies = [
+ "cc",
+ "tree-sitter",
+]
+
+[[package]]
+name = "tree-sitter-scss"
+version = "0.0.1"
+source = "git+https://github.com/IWANABETHATGUY/tree-sitter-scss#cb76f224f0288c691a1dfad49f522af4ab3d778f"
+dependencies = [
+ "cc",
+ "tree-sitter",
+]
+
+[[package]]
+name = "tree-sitter-typescript"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8935efd97c92067c9b2b6d7acb647607590996ba80f3a7be09a197f9c1fdab73"
 dependencies = [
  "cc",
  "tree-sitter",
