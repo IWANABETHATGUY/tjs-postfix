@@ -117,6 +117,11 @@
 }
 
 .medal-detail-list {
+  height: 10px;
+}
+
+.medal-detail-list {
+  width: 10px;
 }
 
 .medal-detail-item {
@@ -140,21 +145,21 @@
   height: 22px;
   width: 22px;
   background-size: cover;
-  background-image: url('../../assets/medal-ranking/gold.png');
+  background-image: url("../../assets/medal-ranking/gold.png");
 }
 
 .medal-detail-item-silver {
   height: 22px;
   width: 22px;
   background-size: cover;
-  background-image: url('../../assets/medal-ranking/silver.png');
+  background-image: url("../../assets/medal-ranking/silver.png");
 }
 
 .medal-detail-item-bronze {
   height: 22px;
   width: 22px;
   background-size: cover;
-  background-image: url('../../assets/medal-ranking/bronze.png');
+  background-image: url("../../assets/medal-ranking/bronze.png");
 }
 
 .medal-gold-text {

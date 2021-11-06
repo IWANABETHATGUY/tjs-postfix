@@ -41,67 +41,77 @@ async fn main() {
         )
     });
 
-    let res = tokio::task::spawn_blocking(move || -> Result<()> {
+    let scss_work_thread = tokio::task::spawn_blocking(move || -> Result<()> {
+        // TODO: should use workdir of vscode
         if let Ok(work_dir) = std::env::current_dir() {
             let mut parser = Parser::new();
             let language = tree_sitter_scss::language();
             parser.set_language(language).unwrap();
-            for result in Walk::new(work_dir) {
+            for result in Walk::new(work_dir.clone()) {
                 match result {
                     Ok(entry) => {
                         let path = entry.path().display().to_string();
-                        if path.ends_with(".scss") || path.ends_with(".css") {
-                            match read_to_string(&path) {
-                                Ok(file) => {
-                                    let tree = parser.parse(&file, None).unwrap();
-                                    let mut position_list = vec![];
-                                    let root_node = tree.root_node();
-                                    traverse(
-                                        root_node,
-                                        &mut vec![],
-                                        &file,
-                                        &mut position_list,
-                                    );
-                                    scss_class_map.insert(path, position_list);
-                                }
-                                Err(_) => {}
-                            }
-                        }
+                        insert_position_list(&path, &mut parser, scss_class_map.clone());
                     }
                     Err(err) => log::debug!("ERROR: {}", err),
                 }
             }
-            log::debug!("{:?}", scss_class_map);
+            log::debug!("found {:?} css/scss file", scss_class_map.len());
+            let (tx, rx) = unbounded();
+            let mut watcher = RecommendedWatcher::new(move |e| match e {
+                Ok(e) => {
+                    tx.send(e).unwrap();
+                }
+                Err(err) => {}
+            })?;
+            // Add a path to be watched. All files and directories at that path and
+            // below will be monitored for changes.
+            watcher.watch(&work_dir, RecursiveMode::Recursive)?;
+            watcher.configure(Config::NoticeEvents(true))?;
+            loop {
+                match rx.recv() {
+                    Ok(e) => {
+                        let path_list = e
+                            .paths
+                            .into_iter()
+                            .filter_map(|item| {
+                                item.canonicalize()
+                                    .ok()
+                                    .and_then(|item| item.into_os_string().into_string().ok())
+                                    .map(|item| item.to_string())
+                            })
+                            .collect::<Vec<_>>();
+                        match e.kind {
+                            notify::EventKind::Create(kind) => {
+                                path_list.into_iter().for_each(|p| {
+                                    insert_position_list(&p, &mut parser, scss_class_map.clone());
+                                });
+                            }
+                            notify::EventKind::Modify(kind) => {
+                                path_list.into_iter().for_each(|p| {
+                                    insert_position_list(&p, &mut parser, scss_class_map.clone());
+                                });
+                            }
+                            notify::EventKind::Remove(kind) => {
+                                path_list.into_iter().for_each(|p| {
+                                    remove_position_list(&p, scss_class_map.clone());
+                                });
+                            }
+                            _ => {}
+                        }
+                        // println!("{:?}", e);
+                    }
+                    Err(_) => todo!(),
+                }
+            }
         }
         Ok(())
-        // let (tx, rx) = unbounded();
-        // let mut watcher = RecommendedWatcher::new(move |e| match e {
-        //     Ok(e) => {
-        //         tx.send(e).unwrap();
-        //     }
-        //     Err(err) => {}
-        // })?;
-        // // Add a path to be watched. All files and directories at that path and
-        // // below will be monitored for changes.
-        // watcher.watch(Path::new("../"), RecursiveMode::Recursive)?;
-        // watcher.configure(Config::NoticeEvents(true))?;
-        // loop {
-        //     match rx.recv() {
-        //         Ok(e) => {
-        //             // println!("{:?}", e);
-        //             for ele in e.paths {
-        //                 // println!("{:?}", std::fs::canonicalize(ele));
-        //             }
-        //         }
-        //         Err(_) => todo!(),
-        //     }
-        // }
     });
     let server = Server::new(stdin, stdout)
         .interleave(messages)
         .serve(service);
 
-    let (a, b) = tokio::join!(res, server,);
+    let (a, b) = tokio::join!(scss_work_thread, server,);
 }
 
 fn traverse(
@@ -153,14 +163,16 @@ fn traverse(
                                 // let partial = &class_name_content[1..];
                                 if let Some(class_list) = trace_stack.last() {
                                     for top_class in class_list {
-                                        let class_name = format!("{}{}", top_class, class_name_content);
+                                        let class_name =
+                                            format!("{}{}", top_class, class_name_content);
                                         position_list
                                             .push((class_name.clone(), selector.start_position()));
                                         new_top.push(class_name);
                                     }
                                 }
                             } else {
-                                position_list.push((class_name_content.clone(), selector.start_position()));
+                                position_list
+                                    .push((class_name_content.clone(), selector.start_position()));
                                 new_top.push(class_name_content);
                             };
                         }
@@ -182,65 +194,27 @@ fn traverse(
         _ => {}
     }
 }
-// fn traverse(
-//     root: Node,
-//     trace_stack: &mut Vec<Vec<String>>,
-//     source_code: &str,
-//     position_list: &mut Vec<(String, Point)>,
-// ) {
-//     let kind = root.kind();
-//     match kind {
-//         "stylesheet" | "block" => {
-//             for i in 0..root.named_child_count() {
-//                 let node = root.named_child(i).unwrap();
-//                 traverse(node, trace_stack, source_code, position_list);
-//             }
-//         }
-//         "rule_set" => {
-//             let selectors = root.child(0);
-//             let mut new_top = vec![];
-//             if let Some(selectors) = selectors {
-//                 // println!("{:?}", selectors);
-//                 for index in 0..selectors.named_child_count() {
-//                     let selector = selectors.named_child(index).unwrap();
-//                     match selector.kind() {
-//                         "class_selector" => {
-//                             // get class_name of selector
-//                             let content = selector
-//                                 .utf8_text(source_code.as_bytes())
-//                                 .unwrap()
-//                                 .to_string();
-//                             if content.starts_with("&") {
-//                                 let partial = &content[1..];
-//                                 if let Some(class_list) = trace_stack.last() {
-//                                     for top_class in class_list {
-//                                         let class_name = format!("{}{}", top_class, partial);
-//                                         position_list
-//                                             .push((class_name.clone(), selector.start_position()));
-//                                         new_top.push(class_name);
-//                                     }
-//                                 }
-//                             } else {
-//                                 position_list.push((content.clone(), selector.start_position()));
-//                                 new_top.push(content);
-//                             };
-//                         }
-//                         _ => {
-//                             // unimplemented!() // TODO
-//                         }
-//                     }
-//                 }
-//             } else {
-//                 return;
-//             }
-//             // println!("{:?}", new_top);
-//             trace_stack.push(new_top);
-//             let block = root.child(1);
-//             if let Some(block) = block {
-//                 traverse(block, trace_stack, source_code, position_list);
-//             }
-//             trace_stack.pop();
-//         }
-//         _ => {}
-//     }
-// }
+fn insert_position_list(
+    path: &str,
+    parser: &mut Parser,
+    scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
+) {
+    if path.ends_with(".scss") || path.ends_with(".css") {
+        match read_to_string(&path) {
+            Ok(file) => {
+                let tree = parser.parse(&file, None).unwrap();
+                let mut position_list = vec![];
+                let root_node = tree.root_node();
+                traverse(root_node, &mut vec![], &file, &mut position_list);
+                scss_class_map.insert(path.to_string(), position_list);
+            }
+            Err(_) => {}
+        }
+    }
+}
+
+fn remove_position_list(path: &str, scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>) {
+    if path.ends_with(".scss") || path.ends_with(".css") {
+        scss_class_map.remove(path);
+    }
+}
