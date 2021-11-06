@@ -6,6 +6,7 @@ use helper::get_tree_sitter_edit_from_change;
 use log::debug;
 use lsp_text_document::lsp_types;
 use lsp_text_document::FullTextDocument;
+use lsp_types::Url;
 use lspower::jsonrpc;
 use lspower::jsonrpc::Result;
 use lspower::lsp::*;
@@ -23,13 +24,15 @@ mod query_pattern;
 
 pub use backend::Backend;
 use document_symbol::get_component_symbol;
+use tree_sitter::Point;
 
 use crate::helper::generate_lsp_range;
 use code_action::{extract_component_action, get_function_call_action};
 use completion::get_react_completion;
 #[lspower::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+        *self.workspace_folder.lock().await = params.workspace_folders.unwrap_or(vec![]);
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
@@ -50,6 +53,7 @@ impl LanguageServer for Backend {
                 code_action_provider: Some(
                     lsp_text_document::lsp_types::CodeActionProviderCapability::Simple(true),
                 ),
+
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace: Some(WorkspaceServerCapabilities {
                     workspace_folders: Some(WorkspaceFoldersServerCapabilities {
@@ -58,10 +62,16 @@ impl LanguageServer for Backend {
                     }),
                     file_operations: None,
                 }),
+                definition_provider: Some(OneOf::Right(DefinitionOptions {
+                    work_done_progress_options: WorkDoneProgressOptions {
+                        work_done_progress: Some(true),
+                    },
+                })),
                 ..ServerCapabilities::default()
             },
         })
     }
+
     async fn initialized(&self, _: InitializedParams) {
         self.reset_templates().await;
         self.client
@@ -117,7 +127,124 @@ impl LanguageServer for Backend {
             .log_message(MessageType::Info, "watched files have changed!")
             .await;
     }
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> lspower::jsonrpc::Result<Option<lsp_types::GotoDefinitionResponse>> {
+        if let Some(document) = self.document_map.lock().await.get(
+            &params
+                .text_document_position_params
+                .text_document
+                .uri
+                .to_string(),
+        ) {
+            let pos = params.text_document_position_params.position.clone();
+            // debug!("before_string:{:?}", before_string);
+            let map = self.parse_tree_map.lock().await;
+            let tree = map.get(
+                &params
+                    .text_document_position_params
+                    .text_document
+                    .uri
+                    .to_string(),
+            );
+            if let Some(tree) = tree {
+                let root = tree.root_node();
+                // this is based bytes index
+                let char_index =
+                    document.rope.line_to_char(pos.line as usize) + pos.character as usize;
+                let click_byte = document.rope.char_to_byte(char_index);
+                let node = root.named_descendant_for_point_range(
+                    Point::new(pos.line as usize, pos.character as usize),
+                    Point::new(pos.line as usize, pos.character as usize),
+                );
+                if let Some(click_node) = node {
+                    log::debug!("jump definition {:?}", click_node.kind());
+                    let parent = if click_node.kind() == "string_fragment"
+                        && click_node.parent().is_some()
+                    {
+                        click_node.parent().unwrap()
+                    } else {
+                        log::error!("fuck parent");
+                        return Ok(None);
+                    };
+                    let attribute = if parent.kind() == "string"
+                        && parent.parent().unwrap().kind() == "jsx_attribute"
+                    {
+                        parent.parent().unwrap()
+                    } else {
+                        log::error!("fuck jsx_attribute");
+                        return Ok(None);
+                    };
+                    match attribute.child(0) {
+                        Some(prop) if prop.kind() == "property_identifier" => {
+                            if document.rope.get_slice(prop.byte_range()).map(|slice| {
+                                matches!(slice.as_str(), Some("className") | Some("class"))
+                            }) != Some(true)
+                            {
+                                return Ok(None);
+                            }
+                            let click_range = click_node.byte_range();
+                            let click_range_start = click_range.start;
+                            if let Some(slice) = document
+                                .rope
+                                .get_slice(click_range)
+                                .map(|slice| slice.to_string())
+                            {
+                                let word_range = get_word_range_of_string(&slice);
 
+                                let range_index = word_range
+                                    .iter()
+                                    .find(|r| r.contains(&(click_byte - click_range_start)));
+                                if let Some(class_name) =
+                                    range_index.map(|range| &slice[range.clone()])
+                                {
+                                    let mut locations = vec![];
+                                    for entry in self.scss_class_map.iter() {
+                                        let path = entry.key();
+                                        let point_list = entry.value();
+                                        for (name, position) in point_list {
+                                            if name == class_name {
+                                                locations.push(Location::new(
+                                                    Url::parse(&format!("file://{}", path)).unwrap(),
+                                                    Range::new(
+                                                        Position::new(
+                                                            position.row as u32,
+                                                            position.column as u32,
+                                                        ),
+                                                        Position::new(
+                                                            position.row as u32,
+                                                            position.column as u32,
+                                                        ),
+                                                    ),
+                                                ));
+                                            }
+                                        }
+                                    }
+                                    return Ok(Some(lsp_types::GotoDefinitionResponse::Array(
+                                        locations
+                                        // vec![Location::new(
+                                        //     params.text_document_position_params.text_document.uri,
+                                        //     Range::new(Position::new(0, 0), Position::new(0, 0)),
+                                        // )],
+                                    )));
+                                } else {
+                                    return Ok(None);
+                                }
+                            }
+                        }
+                        _ => (),
+                    }
+
+                    // self.client
+                    //     .log_message(MessageType::Info, node.kind())
+                    //     .await;
+                }
+            };
+        }
+
+        Ok(None)
+    }
     async fn document_symbol(
         &self,
         params: lsp_types::DocumentSymbolParams,
@@ -287,13 +414,21 @@ impl LanguageServer for Backend {
                             );
                             let source = document.rope.to_string();
 
-                            let res =
-                                get_react_completion(&source[node.byte_range()], &source, &replace_range, tree, parser);
-                            let mut template_item_list =
-                                self.get_template_completion_item_list(&source[node.byte_range()], &replace_range);
-                            template_item_list.extend(
-                                self.get_snippet_completion_item_list(&source[node.byte_range()], &replace_range),
+                            let res = get_react_completion(
+                                &source[node.byte_range()],
+                                &source,
+                                &replace_range,
+                                tree,
+                                parser,
                             );
+                            let mut template_item_list = self.get_template_completion_item_list(
+                                &source[node.byte_range()],
+                                &replace_range,
+                            );
+                            template_item_list.extend(self.get_snippet_completion_item_list(
+                                &source[node.byte_range()],
+                                &replace_range,
+                            ));
                             template_item_list.extend(res);
                             template_item_list.push(CompletionItem::new_simple(
                                 format!("{:?}", start.elapsed()),
@@ -308,4 +443,26 @@ impl LanguageServer for Backend {
         }
         Ok(None)
     }
+}
+
+fn get_word_range_of_string(string: &str) -> Vec<std::ops::Range<usize>> {
+    let mut index = -1;
+    let mut iter = string.bytes().enumerate();
+    let mut range = vec![];
+    let mut in_word = false;
+    while let Some((i, c)) = iter.next() {
+        if c.is_ascii_whitespace() && index != -1 {
+            in_word = false;
+            range.push(index as usize..i);
+            index = -1;
+        } else if !c.is_ascii_whitespace() && index == -1 {
+            in_word = true;
+            index = i as i32;
+        }
+    }
+
+    if in_word {
+        range.push(index as usize..string.len())
+    }
+    range
 }

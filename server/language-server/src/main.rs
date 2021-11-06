@@ -1,7 +1,16 @@
+use dashmap::DashMap;
+use ignore::Walk;
 use lspower::{LspService, Server};
+use std::{ffi::OsStr, fs::read_to_string, path::Path};
+use tree_sitter::{Node, Parser, Point};
+
+use crossbeam_channel::unbounded;
+use notify::{Config, RecommendedWatcher, RecursiveMode, Result, Watcher};
+
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex as StdMutex},
+    time::Duration,
 };
 use tjs_language_server::Backend;
 use tokio::sync::Mutex;
@@ -14,24 +23,224 @@ async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
+    let tsx_lang = language_tsx();
+    let mut tsx_parser = tree_sitter::Parser::new();
+    tsx_parser.set_language(tsx_lang).unwrap();
+    let scss_class_map = Arc::new(DashMap::new());
     let (service, messages) = LspService::new(|client| {
-        let language = unsafe { language_tsx() };
-        let mut parser = tree_sitter::Parser::new();
-        parser.set_language(language).unwrap();
-        let parser = Mutex::new(parser);
         let document_map = Mutex::new(HashMap::new());
         let parse_tree_map = Mutex::new(HashMap::new());
         let postfix_template_list = Arc::new(StdMutex::new(vec![]));
         Backend::new(
             client,
             document_map,
-            parser,
+            Mutex::new(tsx_parser),
             postfix_template_list,
             parse_tree_map,
+            scss_class_map.clone(),
         )
     });
-    Server::new(stdin, stdout)
+
+    let res = tokio::task::spawn_blocking(move || -> Result<()> {
+        if let Ok(work_dir) = std::env::current_dir() {
+            let mut parser = Parser::new();
+            let language = tree_sitter_scss::language();
+            parser.set_language(language).unwrap();
+            for result in Walk::new(work_dir) {
+                match result {
+                    Ok(entry) => {
+                        let path = entry.path().display().to_string();
+                        if path.ends_with(".scss") || path.ends_with(".css") {
+                            match read_to_string(&path) {
+                                Ok(file) => {
+                                    let tree = parser.parse(&file, None).unwrap();
+                                    let mut position_list = vec![];
+                                    let root_node = tree.root_node();
+                                    traverse(
+                                        root_node,
+                                        &mut vec![],
+                                        &file,
+                                        &mut position_list,
+                                    );
+                                    scss_class_map.insert(path, position_list);
+                                }
+                                Err(_) => {}
+                            }
+                        }
+                    }
+                    Err(err) => log::debug!("ERROR: {}", err),
+                }
+            }
+            log::debug!("{:?}", scss_class_map);
+        }
+        Ok(())
+        // let (tx, rx) = unbounded();
+        // let mut watcher = RecommendedWatcher::new(move |e| match e {
+        //     Ok(e) => {
+        //         tx.send(e).unwrap();
+        //     }
+        //     Err(err) => {}
+        // })?;
+        // // Add a path to be watched. All files and directories at that path and
+        // // below will be monitored for changes.
+        // watcher.watch(Path::new("../"), RecursiveMode::Recursive)?;
+        // watcher.configure(Config::NoticeEvents(true))?;
+        // loop {
+        //     match rx.recv() {
+        //         Ok(e) => {
+        //             // println!("{:?}", e);
+        //             for ele in e.paths {
+        //                 // println!("{:?}", std::fs::canonicalize(ele));
+        //             }
+        //         }
+        //         Err(_) => todo!(),
+        //     }
+        // }
+    });
+    let server = Server::new(stdin, stdout)
         .interleave(messages)
-        .serve(service)
-        .await;
+        .serve(service);
+
+    let (a, b) = tokio::join!(res, server,);
 }
+
+fn traverse(
+    root: Node,
+    trace_stack: &mut Vec<Vec<String>>,
+    source_code: &str,
+    position_list: &mut Vec<(String, Point)>,
+) {
+    let kind = root.kind();
+    match kind {
+        "stylesheet" | "block" => {
+            for i in 0..root.named_child_count() {
+                let node = root.named_child(i).unwrap();
+                traverse(node, trace_stack, source_code, position_list);
+            }
+        }
+        "rule_set" => {
+            let selectors = root.child(0);
+            let mut new_top = vec![];
+            if let Some(selectors) = selectors {
+                for index in 0..selectors.named_child_count() {
+                    let selector = selectors.named_child(index).unwrap();
+                    match selector.kind() {
+                        "class_selector" => {
+                            // get class_name of selector
+                            let (class_name, has_nested) = {
+                                let mut class_name = None;
+                                let mut has_nested = false;
+                                for ci in 0..selector.named_child_count() {
+                                    let c = selector.named_child(ci).unwrap();
+                                    if c.kind() == "class_name" {
+                                        class_name = Some(c);
+                                    }
+                                    if c.kind() == "nesting_selector" {
+                                        has_nested = true;
+                                    }
+                                }
+                                (class_name, has_nested)
+                            };
+                            if class_name.is_none() {
+                                continue;
+                            }
+                            let class_name_content = class_name
+                                .unwrap()
+                                .utf8_text(source_code.as_bytes())
+                                .unwrap()
+                                .to_string();
+                            if has_nested {
+                                // let partial = &class_name_content[1..];
+                                if let Some(class_list) = trace_stack.last() {
+                                    for top_class in class_list {
+                                        let class_name = format!("{}{}", top_class, class_name_content);
+                                        position_list
+                                            .push((class_name.clone(), selector.start_position()));
+                                        new_top.push(class_name);
+                                    }
+                                }
+                            } else {
+                                position_list.push((class_name_content.clone(), selector.start_position()));
+                                new_top.push(class_name_content);
+                            };
+                        }
+                        _ => {
+                            // unimplemented!() // TODO
+                        }
+                    }
+                }
+            } else {
+                return;
+            }
+            trace_stack.push(new_top);
+            let block = root.child(1);
+            if let Some(block) = block {
+                traverse(block, trace_stack, source_code, position_list);
+            }
+            trace_stack.pop();
+        }
+        _ => {}
+    }
+}
+// fn traverse(
+//     root: Node,
+//     trace_stack: &mut Vec<Vec<String>>,
+//     source_code: &str,
+//     position_list: &mut Vec<(String, Point)>,
+// ) {
+//     let kind = root.kind();
+//     match kind {
+//         "stylesheet" | "block" => {
+//             for i in 0..root.named_child_count() {
+//                 let node = root.named_child(i).unwrap();
+//                 traverse(node, trace_stack, source_code, position_list);
+//             }
+//         }
+//         "rule_set" => {
+//             let selectors = root.child(0);
+//             let mut new_top = vec![];
+//             if let Some(selectors) = selectors {
+//                 // println!("{:?}", selectors);
+//                 for index in 0..selectors.named_child_count() {
+//                     let selector = selectors.named_child(index).unwrap();
+//                     match selector.kind() {
+//                         "class_selector" => {
+//                             // get class_name of selector
+//                             let content = selector
+//                                 .utf8_text(source_code.as_bytes())
+//                                 .unwrap()
+//                                 .to_string();
+//                             if content.starts_with("&") {
+//                                 let partial = &content[1..];
+//                                 if let Some(class_list) = trace_stack.last() {
+//                                     for top_class in class_list {
+//                                         let class_name = format!("{}{}", top_class, partial);
+//                                         position_list
+//                                             .push((class_name.clone(), selector.start_position()));
+//                                         new_top.push(class_name);
+//                                     }
+//                                 }
+//                             } else {
+//                                 position_list.push((content.clone(), selector.start_position()));
+//                                 new_top.push(content);
+//                             };
+//                         }
+//                         _ => {
+//                             // unimplemented!() // TODO
+//                         }
+//                     }
+//                 }
+//             } else {
+//                 return;
+//             }
+//             // println!("{:?}", new_top);
+//             trace_stack.push(new_top);
+//             let block = root.child(1);
+//             if let Some(block) = block {
+//                 traverse(block, trace_stack, source_code, position_list);
+//             }
+//             trace_stack.pop();
+//         }
+//         _ => {}
+//     }
+// }

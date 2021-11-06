@@ -39,7 +39,6 @@ pub async fn get_component_symbol(
                             name: name.to_string(),
                             kind: SymbolKind::Operator,
                             tags: None,
-                            deprecated: None,
                             location: Location {
                                 uri: params.text_document.uri.clone(),
                                 range: Range::new(
@@ -54,6 +53,7 @@ pub async fn get_component_symbol(
                                 ),
                             },
                             container_name: None,
+                            deprecated: None,
                         });
                     }
                 }
