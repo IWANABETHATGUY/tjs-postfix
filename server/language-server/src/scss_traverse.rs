@@ -22,70 +22,29 @@ pub fn traverse_scss_file(
                     let selector = selectors.named_child(index).unwrap();
                     match selector.kind() {
                         "class_selector" => {
-                            // get class_name of selector
-                            let selector_content = selector
-                                .utf8_text(source_code.as_bytes())
-                                .unwrap()
-                                .to_string();
-                            let has_nested = selector_content.starts_with("&");
-                            // let transpile_selector_content = if has_nested {
-                            //     selector_content.replace_range(0..1, )
-                            // } else {
-
-                            // };
-                            // let (class_name, has_nested) = {
-                            //     let mut class_name = None;
-                            //     let mut has_nested = false;
-                            //     for ci in 0..selector.named_child_count() {
-                            //         let c = selector.named_child(ci).unwrap();
-                            //         if c.kind() == "class_name" {
-                            //             class_name = Some(c);
-                            //         }
-                            //         if c.kind() == "nesting_selector" {
-                            //             has_nested = true;
-                            //         }
-                            //     }
-                            //     (class_name, has_nested)
-                            // };
-                            // if class_name.is_none() {
-                            //     continue;
-                            // }
-                            if has_nested {
-                                // let partial = &class_name_content[1..];
-                                if let Some(class_list) = trace_stack.last() {
-                                    for top_class in class_list {
-                                        let class_name = format!(
-                                            "{}{}",
-                                            &top_class,
-                                            &selector_content[1..]
-                                        );
-                                        let selector_list =
-                                            class_name.split(".").filter(|a| !a.is_empty()).collect::<Vec<_>>();
-                                        for sub_selector in selector_list {
-                                            position_list.push((
-                                                sub_selector.to_string(),
-                                                selector.start_position(),
-                                            ));
-                                        }
-                                        new_top.push(class_name);
-                                    }
+                            traverse_class_selector(
+                                selector,
+                                source_code,
+                                trace_stack,
+                                position_list,
+                                &mut new_top,
+                            );
+                        }
+                        "descendant_selector" => {
+                            let mut cur_new_top = vec![];
+                            for index in 0..selector.named_child_count() {
+                                let s = selector.named_child(index).unwrap();
+                                if s.kind() == "class_selector" {
+                                    traverse_class_selector(
+                                        s,
+                                        source_code,
+                                        trace_stack,
+                                        position_list,
+                                        &mut cur_new_top,
+                                    );
                                 }
-                            } else {
-                                let class_name =
-                                    format!("{}", selector_content);
-                                let selector_list = class_name.split(".").filter(|a| !a.is_empty()).collect::<Vec<_>>();
-                                for sub_selector in selector_list {
-                                    position_list.push((
-                                        sub_selector.to_string(),
-                                        selector.start_position(),
-                                    ));
-                                }
-                                new_top.push(class_name);
-
-                                // position_list
-                                //     .push((selector_content.clone(), selector.start_position()));
-                                // new_top.push(selector_content);
-                            };
+                            }
+                            new_top.push(cur_new_top.join(" "));
                         }
                         _ => {
                             // unimplemented!() // TODO
@@ -106,6 +65,51 @@ pub fn traverse_scss_file(
     }
 }
 
+fn traverse_class_selector(
+    selector: Node,
+    source_code: &str,
+    trace_stack: &mut Vec<Vec<String>>,
+    position_list: &mut Vec<(String, Point)>,
+    new_top: &mut Vec<String>,
+) {
+    let selector_content = selector
+        .utf8_text(source_code.as_bytes())
+        .unwrap()
+        .to_string();
+    let has_nested = selector_content.starts_with("&");
+    if has_nested {
+        // let partial = &class_name_content[1..];
+        if let Some(class_list) = trace_stack.last() {
+            for top_class in class_list {
+                let class_name = format!("{}{}", &top_class, &selector_content[1..]);
+                let selector_list = class_name
+                    .split(".")
+                    .filter(|a| !a.is_empty())
+                    .collect::<Vec<_>>();
+                for sub_selector in selector_list {
+                    position_list
+                        .push((sub_selector.trim().to_string(), selector.start_position()));
+                }
+                new_top.push(class_name);
+            }
+        }
+    } else {
+        let class_name = format!("{}", selector_content);
+        let selector_list = class_name
+            .split(".")
+            .filter(|a| !a.is_empty())
+            .collect::<Vec<_>>();
+        for sub_selector in selector_list {
+            position_list.push((sub_selector.trim().to_string(), selector.start_position()));
+        }
+        new_top.push(class_name);
+
+        // position_list
+        //     .push((selector_content.clone(), selector.start_position()));
+        // new_top.push(selector_content);
+    };
+}
+
 #[cfg(test)]
 mod test_scss {
     use tree_sitter::Parser;
@@ -113,7 +117,7 @@ mod test_scss {
     use super::*;
 
     #[test]
-    fn test_() {
+    fn test_nesting_scss() {
         let scss = r#"
 .btn {
     width: 100px;
@@ -126,23 +130,6 @@ mod test_scss {
     }
 }
         "#;
-
-        fun_name(scss);
-    }
-
-    fn fun_name(scss: &str) {
-        let mut parser = Parser::new();
-        let language = tree_sitter_scss::language();
-        parser.set_language(language).unwrap();
-        let tree = parser.parse(&scss, None).unwrap();
-        let mut position_list = vec![];
-        let root_node = tree.root_node();
-        traverse_scss_file(root_node, &mut vec![], scss, &mut position_list);
-        let mut class_list = position_list
-            .into_iter()
-            .map(|item| item.0)
-            .collect::<Vec<_>>();
-        class_list.sort();
         let mut expected = vec![
             "btn".to_string(),
             "btn-first".to_string(),
@@ -157,6 +144,51 @@ mod test_scss {
             "third-result".to_string(),
         ];
         expected.sort();
+        assert_class_list(scss, expected);
+    }
+
+    #[test]
+    fn test_descendent_scss() {
+        let scss = r#"
+.btn {
+    width: 100px;
+    &-result &-second, &-another.that {
+        &.function {
+            width: 10px;
+        }
+    }
+}
+        "#;
+        let mut expected = vec![
+            "btn-result".to_string(),
+            "btn-second".to_string(),
+            "btn-another".to_string(),
+            "that".to_string(),
+            "btn".to_string(),
+            "btn-result".to_string(),
+            "btn-second".to_string(),
+            "function".to_string(),
+            "btn-another".to_string(),
+            "that".to_string(),
+            "function".to_string(),
+        ];
+        expected.sort();
+        assert_class_list(scss, expected);
+    }
+
+    fn assert_class_list(scss: &str, expected: Vec<String>) {
+        let mut parser = Parser::new();
+        let language = tree_sitter_scss::language();
+        parser.set_language(language).unwrap();
+        let tree = parser.parse(&scss, None).unwrap();
+        let mut position_list = vec![];
+        let root_node = tree.root_node();
+        traverse_scss_file(root_node, &mut vec![], scss, &mut position_list);
+        let mut class_list = position_list
+            .into_iter()
+            .map(|item| item.0)
+            .collect::<Vec<_>>();
+        class_list.sort();
         assert_eq!(class_list, expected);
     }
 }

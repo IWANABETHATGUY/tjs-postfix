@@ -20,7 +20,6 @@ fn main() {
     println!("{:?}", position_list);
     // let parser = CssParser::new(&mut ParserInput::new(source_code));
 }
-// TODO: fix badcase when multiple class selector
 fn traverse(
     root: Node,
     trace_stack: &mut Vec<Vec<String>>,
