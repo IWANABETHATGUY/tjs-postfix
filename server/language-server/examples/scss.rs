@@ -4,7 +4,7 @@ use lsp_text_document::lsp_types::Position;
 use tree_sitter::{Language, Node, Parser, Point};
 // use cssparser::{Parser as CssParser, ParserInput, Token};
 fn main() {
-    let source_code = include_str!("../assets/small.scss");
+    let source_code = include_str!("../assets/nest.scss");
     let start = Instant::now();
     let mut parser = Parser::new();
     let language = tree_sitter_scss::language();
@@ -125,3 +125,13 @@ fn pretty_print(source_code: &str, root: Node, level: usize) {
         pretty_print(source_code, node, level + 1);
     }
 }
+
+// .btn {
+//   width: 100px;
+// }
+// .btn-test.result.fuck, .btn-tes.that-shit {
+//   height: 10px;
+// }
+// .btn-test.result.fuck-result, .btn-tes.that-shit-result {
+//   color: #ccc;
+// }

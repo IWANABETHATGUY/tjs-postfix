@@ -1,0 +1,17 @@
+.btn {
+  width: 100px;
+  &-test.result.fuck,
+  &-tes.that-shit {
+    height: 10px;
+    &-result {
+      color: #ccc;
+    }
+  }
+  &.cta {
+    margin: auto 8px;
+    float: none;
+    display: block;
+    display: inline;
+    padding: 16px 32px;
+  }
+}

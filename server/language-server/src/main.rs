@@ -12,7 +12,7 @@ use std::{
     sync::{Arc, Mutex as StdMutex},
     time::Duration,
 };
-use tjs_language_server::Backend;
+use tjs_language_server::{Backend, insert_position_list, remove_position_list};
 use tokio::sync::Mutex;
 
 use tree_sitter_typescript::language_tsx;
@@ -111,110 +111,5 @@ async fn main() {
         .interleave(messages)
         .serve(service);
 
-    let (a, b) = tokio::join!(scss_work_thread, server,);
-}
-
-fn traverse(
-    root: Node,
-    trace_stack: &mut Vec<Vec<String>>,
-    source_code: &str,
-    position_list: &mut Vec<(String, Point)>,
-) {
-    let kind = root.kind();
-    match kind {
-        "stylesheet" | "block" => {
-            for i in 0..root.named_child_count() {
-                let node = root.named_child(i).unwrap();
-                traverse(node, trace_stack, source_code, position_list);
-            }
-        }
-        "rule_set" => {
-            let selectors = root.child(0);
-            let mut new_top = vec![];
-            if let Some(selectors) = selectors {
-                for index in 0..selectors.named_child_count() {
-                    let selector = selectors.named_child(index).unwrap();
-                    match selector.kind() {
-                        "class_selector" => {
-                            // get class_name of selector
-                            let (class_name, has_nested) = {
-                                let mut class_name = None;
-                                let mut has_nested = false;
-                                for ci in 0..selector.named_child_count() {
-                                    let c = selector.named_child(ci).unwrap();
-                                    if c.kind() == "class_name" {
-                                        class_name = Some(c);
-                                    }
-                                    if c.kind() == "nesting_selector" {
-                                        has_nested = true;
-                                    }
-                                }
-                                (class_name, has_nested)
-                            };
-                            if class_name.is_none() {
-                                continue;
-                            }
-                            let class_name_content = class_name
-                                .unwrap()
-                                .utf8_text(source_code.as_bytes())
-                                .unwrap()
-                                .to_string();
-                            if has_nested {
-                                // let partial = &class_name_content[1..];
-                                if let Some(class_list) = trace_stack.last() {
-                                    for top_class in class_list {
-                                        let class_name =
-                                            format!("{}{}", top_class, class_name_content);
-                                        position_list
-                                            .push((class_name.clone(), selector.start_position()));
-                                        new_top.push(class_name);
-                                    }
-                                }
-                            } else {
-                                position_list
-                                    .push((class_name_content.clone(), selector.start_position()));
-                                new_top.push(class_name_content);
-                            };
-                        }
-                        _ => {
-                            // unimplemented!() // TODO
-                        }
-                    }
-                }
-            } else {
-                return;
-            }
-            trace_stack.push(new_top);
-            let block = root.child(1);
-            if let Some(block) = block {
-                traverse(block, trace_stack, source_code, position_list);
-            }
-            trace_stack.pop();
-        }
-        _ => {}
-    }
-}
-fn insert_position_list(
-    path: &str,
-    parser: &mut Parser,
-    scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
-) {
-    if path.ends_with(".scss") || path.ends_with(".css") {
-        match read_to_string(&path) {
-            Ok(file) => {
-                let tree = parser.parse(&file, None).unwrap();
-                let mut position_list = vec![];
-                let root_node = tree.root_node();
-                traverse(root_node, &mut vec![], &file, &mut position_list);
-                scss_class_map.insert(path.to_string(), position_list);
-            }
-            Err(_) => {}
-        }
-    }
-}
-
-fn remove_position_list(path: &str, scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>) {
-    if path.ends_with(".scss") || path.ends_with(".css") {
-        scss_class_map.remove(path);
-    }
+    let (_, _) = tokio::join!(scss_work_thread, server,);
 }
