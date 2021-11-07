@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use lspower::lsp::notification::Notification;
+use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CustomNotificationParams {
     title: String,
@@ -8,9 +8,8 @@ pub struct CustomNotificationParams {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct AstPreviewRequestParams {
-    pub(crate) path: String
+    pub(crate) path: String,
 }
-
 
 impl CustomNotificationParams {
     pub(crate) fn new(title: impl Into<String>, message: impl Into<String>) -> Self {

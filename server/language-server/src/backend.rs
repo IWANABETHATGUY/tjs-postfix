@@ -1,3 +1,4 @@
+use dashmap::DashMap;
 use inflector::Inflector;
 use lsp_text_document::FullTextDocument;
 use lspower::{lsp::*, Client};
@@ -6,6 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex;
+use tree_sitter::Point;
 use tree_sitter::{Node, Parser, Tree};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -26,6 +28,8 @@ pub struct Backend {
     pub(crate) parser: Mutex<Parser>,
     pub(crate) parse_tree_map: Mutex<HashMap<String, Tree>>,
     postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
+    pub workspace_folder: Mutex<Vec<WorkspaceFolder>>,
+    pub scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
 }
 impl Backend {
     pub fn new(
@@ -34,6 +38,7 @@ impl Backend {
         parser: Mutex<Parser>,
         postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
         parse_tree_map: Mutex<HashMap<String, Tree>>,
+        scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
     ) -> Self {
         Self {
             client,
@@ -41,6 +46,8 @@ impl Backend {
             parser,
             postfix_template_list,
             parse_tree_map,
+            workspace_folder: Mutex::new(vec![]),
+            scss_class_map, // w    pub workspace_folders: Option<Vec<WorkspaceFolder>>,
         }
     }
 

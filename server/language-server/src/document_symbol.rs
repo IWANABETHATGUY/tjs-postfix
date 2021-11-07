@@ -1,9 +1,12 @@
-use lsp_text_document::lsp_types::{DocumentSymbolParams, DocumentSymbolResponse, Location, Position, Range, SymbolInformation, SymbolKind};
+use lsp_text_document::lsp_types::{
+    DocumentSymbolParams, DocumentSymbolResponse, Location, Position, Range, SymbolInformation,
+    SymbolKind,
+};
 
 use lspower::jsonrpc::Result;
 use tree_sitter::{Query, QueryCursor};
 
-use crate::{Backend, query_pattern::DOCUMENT_SYMBOL_QUERY_PATTERN};
+use crate::{query_pattern::DOCUMENT_SYMBOL_QUERY_PATTERN, Backend};
 
 pub async fn get_component_symbol(
     backend: &Backend,
@@ -39,7 +42,6 @@ pub async fn get_component_symbol(
                             name: name.to_string(),
                             kind: SymbolKind::Operator,
                             tags: None,
-                            deprecated: None,
                             location: Location {
                                 uri: params.text_document.uri.clone(),
                                 range: Range::new(
@@ -54,6 +56,7 @@ pub async fn get_component_symbol(
                                 ),
                             },
                             container_name: None,
+                            deprecated: None,
                         });
                     }
                 }

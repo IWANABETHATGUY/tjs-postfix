@@ -26,3 +26,7 @@ tree-sitter = "0.20.0"
 tree-sitter-typescript = "0.20.0"
 tree-sitter-scss = { git = "https://github.com/IWANABETHATGUY/tree-sitter-scss" }
 ignore = "0.4.18"
+
+crossbeam-channel = "0.5.1"
+notify = "5.0.0-pre.13"
+dashmap = "4.0.2"
