@@ -1,9 +1,12 @@
-use lsp_text_document::lsp_types::{DocumentSymbolParams, DocumentSymbolResponse, Location, Position, Range, SymbolInformation, SymbolKind};
+use lsp_text_document::lsp_types::{
+    DocumentSymbolParams, DocumentSymbolResponse, Location, Position, Range, SymbolInformation,
+    SymbolKind,
+};
 
 use lspower::jsonrpc::Result;
 use tree_sitter::{Query, QueryCursor};
 
-use crate::{Backend, query_pattern::DOCUMENT_SYMBOL_QUERY_PATTERN};
+use crate::{query_pattern::DOCUMENT_SYMBOL_QUERY_PATTERN, Backend};
 
 pub async fn get_component_symbol(
     backend: &Backend,

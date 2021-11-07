@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::fs::read_to_string;
 use std::sync::Arc;
-use std::{collections::HashMap, time::Instant};
+use std::time::Instant;
 
 pub use backend::TreeWrapper;
 use dashmap::DashMap;
@@ -479,7 +479,8 @@ impl LanguageServer for Backend {
                                 let result = class_set
                                     .into_iter()
                                     .map(|class| {
-                                        let mut item = CompletionItem::new_simple(class.clone(), class);
+                                        let mut item =
+                                            CompletionItem::new_simple(class.clone(), class);
                                         item.kind = Some(CompletionItemKind::Class);
                                         item
                                     })

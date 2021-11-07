@@ -20,7 +20,7 @@ fn main() {
     println!("{:?}", position_list);
     // let parser = CssParser::new(&mut ParserInput::new(source_code));
 }
-
+// TODO: fix badcase when multiple class selector
 fn traverse(
     root: Node,
     trace_stack: &mut Vec<Vec<String>>,
@@ -71,14 +71,16 @@ fn traverse(
                                 // let partial = &class_name_content[1..];
                                 if let Some(class_list) = trace_stack.last() {
                                     for top_class in class_list {
-                                        let class_name = format!("{}{}", top_class, class_name_content);
+                                        let class_name =
+                                            format!("{}{}", top_class, class_name_content);
                                         position_list
                                             .push((class_name.clone(), selector.start_position()));
                                         new_top.push(class_name);
                                     }
                                 }
                             } else {
-                                position_list.push((class_name_content.clone(), selector.start_position()));
+                                position_list
+                                    .push((class_name_content.clone(), selector.start_position()));
                                 new_top.push(class_name_content);
                             };
                         }

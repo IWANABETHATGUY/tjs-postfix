@@ -12,7 +12,7 @@ use std::{
     sync::{Arc, Mutex as StdMutex},
     time::Duration,
 };
-use tjs_language_server::{Backend, insert_position_list, remove_position_list};
+use tjs_language_server::{insert_position_list, remove_position_list, Backend};
 use tokio::sync::Mutex;
 
 use tree_sitter_typescript::language_tsx;

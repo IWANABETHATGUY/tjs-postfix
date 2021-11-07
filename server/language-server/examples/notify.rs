@@ -22,7 +22,10 @@ async fn main() -> Result<()> {
         })?;
         // Add a path to be watched. All files and directories at that path and
         // below will be monitored for changes.
-        watcher.watch(Path::new("/home/hxj/Documents/css/github/grid-flexbox-v2"), RecursiveMode::Recursive)?;
+        watcher.watch(
+            Path::new("/home/hxj/Documents/css/github/grid-flexbox-v2"),
+            RecursiveMode::Recursive,
+        )?;
         watcher.configure(Config::NoticeEvents(true))?;
         loop {
             match rx.recv() {

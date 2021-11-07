@@ -5,7 +5,10 @@ fn main() {
     let string = "我-".to_string();
     let ranges = get_word_range_of_string(&string);
     println!("{:?}", ranges);
-    println!("{:?}", ranges.into_iter().map(|r| &string[r]).collect::<Vec<_>>());
+    println!(
+        "{:?}",
+        ranges.into_iter().map(|r| &string[r]).collect::<Vec<_>>()
+    );
     // for result in Walk::new("../../") {
     //     // Each item yielded by the iterator is either a directory entry or an
     //     // error, so either print the path or the error.

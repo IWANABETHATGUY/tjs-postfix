@@ -47,8 +47,7 @@ impl Backend {
             postfix_template_list,
             parse_tree_map,
             workspace_folder: Mutex::new(vec![]),
-            scss_class_map
-            // w    pub workspace_folders: Option<Vec<WorkspaceFolder>>,
+            scss_class_map, // w    pub workspace_folders: Option<Vec<WorkspaceFolder>>,
         }
     }
 
