@@ -25,12 +25,13 @@ mod document_symbol;
 mod helper;
 mod notification;
 mod query_pattern;
-
+mod scss_traverse;
 pub use backend::Backend;
 use document_symbol::get_component_symbol;
-use tree_sitter::{Node, Parser, Point};
+use tree_sitter::{Parser, Point};
 
 use crate::helper::generate_lsp_range;
+use crate::scss_traverse::traverse_scss_file;
 use code_action::{extract_component_action, get_function_call_action};
 use completion::get_react_completion;
 #[lspower::async_trait]
@@ -339,23 +340,23 @@ impl LanguageServer for Backend {
         }
     }
 
-    async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        let start = Instant::now();
-        let path = params.text_document.uri.to_string();
-        let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().await.get(&path) {
-            Some((path, format!("{}", TreeWrapper(tree.clone(),))))
-        } else {
-            None
-        };
-        if let Some((path, ast_string)) = path_ast_tuple {
-            self.client
-                .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
-                    path, ast_string,
-                ))
-                .await;
-        }
+    async fn did_save(&self, _params: DidSaveTextDocumentParams) {
+        // let start = Instant::now();
+        // let path = params.text_document.uri.to_string();
+        // let path_ast_tuple = if let Some(tree) = self.parse_tree_map.lock().await.get(&path) {
+        //     Some((path, format!("{}", TreeWrapper(tree.clone(),))))
+        // } else {
+        //     None
+        // };
+        // if let Some((path, ast_string)) = path_ast_tuple {
+        //     self.client
+        //         .send_custom_notification::<CustomNotification>(CustomNotificationParams::new(
+        //             path, ast_string,
+        //         ))
+        //         .await;
+        // }
 
-        debug!("{:?}", start.elapsed());
+        // debug!("{:?}", start.elapsed());
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
@@ -523,86 +524,6 @@ pub fn get_word_range_of_string(string: &str) -> Vec<std::ops::Range<usize>> {
     range
 }
 
-pub fn traverse(
-    root: Node,
-    trace_stack: &mut Vec<Vec<String>>,
-    source_code: &str,
-    position_list: &mut Vec<(String, Point)>,
-) {
-    let kind = root.kind();
-    match kind {
-        "stylesheet" | "block" => {
-            for i in 0..root.named_child_count() {
-                let node = root.named_child(i).unwrap();
-                traverse(node, trace_stack, source_code, position_list);
-            }
-        }
-        "rule_set" => {
-            let selectors = root.child(0);
-            let mut new_top = vec![];
-            if let Some(selectors) = selectors {
-                for index in 0..selectors.named_child_count() {
-                    let selector = selectors.named_child(index).unwrap();
-                    match selector.kind() {
-                        "class_selector" => {
-                            // get class_name of selector
-                            let (class_name, has_nested) = {
-                                let mut class_name = None;
-                                let mut has_nested = false;
-                                for ci in 0..selector.named_child_count() {
-                                    let c = selector.named_child(ci).unwrap();
-                                    if c.kind() == "class_name" {
-                                        class_name = Some(c);
-                                    }
-                                    if c.kind() == "nesting_selector" {
-                                        has_nested = true;
-                                    }
-                                }
-                                (class_name, has_nested)
-                            };
-                            if class_name.is_none() {
-                                continue;
-                            }
-                            let class_name_content = class_name
-                                .unwrap()
-                                .utf8_text(source_code.as_bytes())
-                                .unwrap()
-                                .to_string();
-                            if has_nested {
-                                // let partial = &class_name_content[1..];
-                                if let Some(class_list) = trace_stack.last() {
-                                    for top_class in class_list {
-                                        let class_name =
-                                            format!("{}{}", top_class, class_name_content);
-                                        position_list
-                                            .push((class_name.clone(), selector.start_position()));
-                                        new_top.push(class_name);
-                                    }
-                                }
-                            } else {
-                                position_list
-                                    .push((class_name_content.clone(), selector.start_position()));
-                                new_top.push(class_name_content);
-                            };
-                        }
-                        _ => {
-                            // unimplemented!() // TODO
-                        }
-                    }
-                }
-            } else {
-                return;
-            }
-            trace_stack.push(new_top);
-            let block = root.child(1);
-            if let Some(block) = block {
-                traverse(block, trace_stack, source_code, position_list);
-            }
-            trace_stack.pop();
-        }
-        _ => {}
-    }
-}
 pub fn insert_position_list(
     path: &str,
     parser: &mut Parser,
@@ -614,7 +535,7 @@ pub fn insert_position_list(
                 let tree = parser.parse(&file, None).unwrap();
                 let mut position_list = vec![];
                 let root_node = tree.root_node();
-                traverse(root_node, &mut vec![], &file, &mut position_list);
+                traverse_scss_file(root_node, &mut vec![], &file, &mut position_list);
                 scss_class_map.insert(path.to_string(), position_list);
             }
             Err(_) => {}

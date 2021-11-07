@@ -1,7 +1,6 @@
 use std::ops::Range;
 
 fn main() {
-    use ignore::Walk;
     let string = "我-".to_string();
     let ranges = get_word_range_of_string(&string);
     println!("{:?}", ranges);
@@ -9,6 +8,10 @@ fn main() {
         "{:?}",
         ranges.into_iter().map(|r| &string[r]).collect::<Vec<_>>()
     );
+    let string = ".test.rest";
+    let res = string.split(".").collect::<Vec<_>>();
+    println!("{:?}", res);
+    println!("{}", res.len());
     // for result in Walk::new("../../") {
     //     // Each item yielded by the iterator is either a directory entry or an
     //     // error, so either print the path or the error.
