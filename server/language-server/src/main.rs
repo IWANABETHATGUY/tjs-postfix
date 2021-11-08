@@ -5,7 +5,7 @@ use std::{ffi::OsStr, fs::read_to_string, path::Path, time::Instant};
 use tree_sitter::{Node, Parser, Point};
 
 use crossbeam_channel::unbounded;
-use notify::{Config, RecommendedWatcher, RecursiveMode, Result, Watcher, event::ModifyKind};
+use notify::{event::ModifyKind, Config, RecommendedWatcher, RecursiveMode, Result, Watcher};
 
 use std::{
     collections::HashMap,
@@ -40,6 +40,10 @@ async fn main() {
             scss_class_map.clone(),
         )
     });
+
+    let server = Server::new(stdin, stdout)
+        .interleave(messages)
+        .serve(service);
 
     let scss_work_thread = tokio::task::spawn_blocking(move || -> Result<()> {
         // TODO: should use workdir of vscode
@@ -89,12 +93,18 @@ async fn main() {
                                 });
                                 log::debug!("reanalyze crate scss file cost {:?}", now.elapsed());
                             }
-                            notify::EventKind::Modify(kind) if matches!(kind, ModifyKind::Data(_)) => {
+                            notify::EventKind::Modify(kind)
+                                if matches!(kind, ModifyKind::Data(_)) =>
+                            {
                                 let now = Instant::now();
                                 path_list.into_iter().for_each(|p| {
                                     insert_position_list(&p, &mut parser, scss_class_map.clone());
                                 });
-                                log::debug!("reanalyze modify scss file cost {:?}, kind: {:?}", now.elapsed(), kind);
+                                log::debug!(
+                                    "reanalyze modify scss file cost {:?}, kind: {:?}",
+                                    now.elapsed(),
+                                    kind
+                                );
                             }
                             notify::EventKind::Remove(kind) => {
                                 path_list.into_iter().for_each(|p| {
@@ -111,9 +121,5 @@ async fn main() {
         }
         Ok(())
     });
-    let server = Server::new(stdin, stdout)
-        .interleave(messages)
-        .serve(service);
-
     let (_, _) = tokio::join!(scss_work_thread, server,);
 }

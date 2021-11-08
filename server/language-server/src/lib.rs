@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 use std::fs::read_to_string;
+use std::fs::File;
+use std::io::Read;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -15,6 +17,7 @@ use lspower::jsonrpc;
 use lspower::jsonrpc::Result;
 use lspower::lsp::*;
 use lspower::LanguageServer;
+use memmap2::Mmap;
 use notification::{AstPreviewRequestParams, CustomNotification, CustomNotificationParams};
 use serde_json::Value;
 
@@ -37,7 +40,7 @@ use completion::get_react_completion;
 #[lspower::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
-        *self.workspace_folder.lock().await = params.workspace_folders.unwrap_or(vec![]);
+        // *self.workspace_folder.lock().await = params.workspace_folders.unwrap_or(vec![]);
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
@@ -226,8 +229,8 @@ impl LanguageServer for Backend {
                                     }
                                 }
                                 return Ok(Some(lsp_types::GotoDefinitionResponse::Array(
-                                        locations
-                                    )));
+                                    locations,
+                                )));
                             } else {
                                 return Ok(None);
                             }
@@ -448,11 +451,14 @@ impl LanguageServer for Backend {
                                 let attr = node.parent().unwrap();
                                 match attr.child(0) {
                                     Some(prop) if prop.kind() == "property_identifier" => {
-                                        if !matches!(&document.rope.to_string()[prop.byte_range()], "className" | "class")  {
+                                        if !matches!(
+                                            &document.rope.to_string()[prop.byte_range()],
+                                            "className" | "class"
+                                        ) {
                                             // log::debug!("is not className when completion");
                                             return Ok(None);
                                         }
-                                    },
+                                    }
                                     _ => (),
                                 };
                                 let mut class_set = HashSet::new();
