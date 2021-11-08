@@ -1,11 +1,11 @@
 use dashmap::DashMap;
 use ignore::Walk;
 use lspower::{LspService, Server};
-use std::{ffi::OsStr, fs::read_to_string, path::Path};
+use std::{ffi::OsStr, fs::read_to_string, path::Path, time::Instant};
 use tree_sitter::{Node, Parser, Point};
 
 use crossbeam_channel::unbounded;
-use notify::{Config, RecommendedWatcher, RecursiveMode, Result, Watcher};
+use notify::{Config, RecommendedWatcher, RecursiveMode, Result, Watcher, event::ModifyKind};
 
 use std::{
     collections::HashMap,
@@ -83,14 +83,18 @@ async fn main() {
                             .collect::<Vec<_>>();
                         match e.kind {
                             notify::EventKind::Create(kind) => {
+                                let now = Instant::now();
                                 path_list.into_iter().for_each(|p| {
                                     insert_position_list(&p, &mut parser, scss_class_map.clone());
                                 });
+                                log::debug!("reanalyze crate scss file cost {:?}", now.elapsed());
                             }
-                            notify::EventKind::Modify(kind) => {
+                            notify::EventKind::Modify(kind) if matches!(kind, ModifyKind::Data(_)) => {
+                                let now = Instant::now();
                                 path_list.into_iter().for_each(|p| {
                                     insert_position_list(&p, &mut parser, scss_class_map.clone());
                                 });
+                                log::debug!("reanalyze modify scss file cost {:?}, kind: {:?}", now.elapsed(), kind);
                             }
                             notify::EventKind::Remove(kind) => {
                                 path_list.into_iter().for_each(|p| {

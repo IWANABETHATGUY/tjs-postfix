@@ -147,7 +147,7 @@ impl LanguageServer for Backend {
                 .uri
                 .to_string(),
         ) {
-            let pos = params.text_document_position_params.position.clone();
+            let pos = params.text_document_position_params.position;
             // debug!("before_string:{:?}", before_string);
             let map = self.parse_tree_map.lock().await;
             let tree = map.get(
@@ -163,10 +163,7 @@ impl LanguageServer for Backend {
                 let char_index =
                     document.rope.line_to_char(pos.line as usize) + pos.character as usize;
                 let click_byte = document.rope.char_to_byte(char_index);
-                let node = root.named_descendant_for_point_range(
-                    Point::new(pos.line as usize, pos.character as usize),
-                    Point::new(pos.line as usize, pos.character as usize),
-                );
+                let node = root.named_descendant_for_byte_range(click_byte, click_byte);
                 if let Some(click_node) = node {
                     log::debug!("jump definition {:?}", click_node.kind());
                     let parent = if click_node.kind() == "string_fragment"
@@ -174,7 +171,7 @@ impl LanguageServer for Backend {
                     {
                         click_node.parent().unwrap()
                     } else {
-                        log::error!("fuck parent");
+                        log::error!("current node kind is not string_fragment");
                         return Ok(None);
                     };
                     let attribute = if parent.kind() == "string"
@@ -182,65 +179,57 @@ impl LanguageServer for Backend {
                     {
                         parent.parent().unwrap()
                     } else {
-                        log::error!("fuck jsx_attribute");
+                        log::error!("parent node kind is not  jsx_attribute");
                         return Ok(None);
                     };
                     match attribute.child(0) {
                         Some(prop) if prop.kind() == "property_identifier" => {
-                            if document.rope.get_slice(prop.byte_range()).map(|slice| {
-                                matches!(slice.as_str(), Some("className") | Some("class"))
-                            }) != Some(true)
-                            {
+                            let document_content = document.rope.to_string();
+                            if !matches!(
+                                &document_content[prop.byte_range()],
+                                "className" | "class"
+                            ) {
+                                log::error!("is not className");
                                 return Ok(None);
                             }
                             let click_range = click_node.byte_range();
                             let click_range_start = click_range.start;
-                            if let Some(slice) = document
-                                .rope
-                                .get_slice(click_range)
-                                .map(|slice| slice.to_string())
-                            {
-                                let word_range = get_word_range_of_string(&slice);
+                            let slice = &document_content[click_range];
 
-                                let range_index = word_range
-                                    .iter()
-                                    .find(|r| r.contains(&(click_byte - click_range_start)));
-                                if let Some(class_name) =
-                                    range_index.map(|range| &slice[range.clone()])
-                                {
-                                    let mut locations = vec![];
-                                    for entry in self.scss_class_map.iter() {
-                                        let path = entry.key();
-                                        let point_list = entry.value();
-                                        for (name, position) in point_list {
-                                            if name == class_name {
-                                                locations.push(Location::new(
-                                                    Url::parse(&format!("file://{}", path))
-                                                        .unwrap(),
-                                                    Range::new(
-                                                        Position::new(
-                                                            position.row as u32,
-                                                            position.column as u32,
-                                                        ),
-                                                        Position::new(
-                                                            position.row as u32,
-                                                            position.column as u32,
-                                                        ),
+                            let word_range = get_word_range_of_string(slice);
+
+                            let range_index = word_range
+                                .iter()
+                                .find(|r| r.contains(&(click_byte - click_range_start)));
+                            if let Some(class_name) = range_index.map(|range| &slice[range.clone()])
+                            {
+                                let mut locations = vec![];
+                                for entry in self.scss_class_map.iter() {
+                                    let path = entry.key();
+                                    let point_list = entry.value();
+                                    for (name, position) in point_list {
+                                        if name == class_name {
+                                            locations.push(Location::new(
+                                                Url::parse(&format!("file://{}", path)).unwrap(),
+                                                Range::new(
+                                                    Position::new(
+                                                        position.row as u32,
+                                                        position.column as u32,
                                                     ),
-                                                ));
-                                            }
+                                                    Position::new(
+                                                        position.row as u32,
+                                                        position.column as u32,
+                                                    ),
+                                                ),
+                                            ));
                                         }
                                     }
-                                    return Ok(Some(lsp_types::GotoDefinitionResponse::Array(
-                                        locations
-                                        // vec![Location::new(
-                                        //     params.text_document_position_params.text_document.uri,
-                                        //     Range::new(Position::new(0, 0), Position::new(0, 0)),
-                                        // )],
-                                    )));
-                                } else {
-                                    return Ok(None);
                                 }
+                                return Ok(Some(lsp_types::GotoDefinitionResponse::Array(
+                                        locations
+                                    )));
+                            } else {
+                                return Ok(None);
                             }
                         }
                         _ => (),
@@ -459,16 +448,11 @@ impl LanguageServer for Backend {
                                 let attr = node.parent().unwrap();
                                 match attr.child(0) {
                                     Some(prop) if prop.kind() == "property_identifier" => {
-                                        if document.rope.get_slice(prop.byte_range()).map(|slice| {
-                                            matches!(
-                                                slice.as_str(),
-                                                Some("className") | Some("class")
-                                            )
-                                        }) != Some(true)
-                                        {
+                                        if !matches!(&document.rope.to_string()[prop.byte_range()], "className" | "class")  {
+                                            // log::debug!("is not className when completion");
                                             return Ok(None);
                                         }
-                                    }
+                                    },
                                     _ => (),
                                 };
                                 let mut class_set = HashSet::new();
