@@ -3,7 +3,7 @@ use tree_sitter::{Node, Point};
 pub fn traverse_scss_file(
     root: Node,
     trace_stack: &mut Vec<Vec<String>>,
-    source_code: &str,
+    source_code: &[u8],
     position_list: &mut Vec<(String, Point)>,
 ) {
     let kind = root.kind();
@@ -67,13 +67,13 @@ pub fn traverse_scss_file(
 
 fn traverse_class_selector(
     selector: Node,
-    source_code: &str,
+    source_code: &[u8],
     trace_stack: &mut Vec<Vec<String>>,
     position_list: &mut Vec<(String, Point)>,
     new_top: &mut Vec<String>,
 ) {
     let selector_content = selector
-        .utf8_text(source_code.as_bytes())
+        .utf8_text(source_code)
         .unwrap()
         .to_string();
     let has_nested = selector_content.starts_with("&");
@@ -183,7 +183,7 @@ mod test_scss {
         let tree = parser.parse(&scss, None).unwrap();
         let mut position_list = vec![];
         let root_node = tree.root_node();
-        traverse_scss_file(root_node, &mut vec![], scss, &mut position_list);
+        traverse_scss_file(root_node, &mut vec![], scss.as_bytes(), &mut position_list);
         let mut class_list = position_list
             .into_iter()
             .map(|item| item.0)

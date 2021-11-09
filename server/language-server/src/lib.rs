@@ -520,12 +520,18 @@ pub fn insert_position_list(
     scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
 ) {
     if path.ends_with(".scss") || path.ends_with(".css") {
-        match read_to_string(&path) {
+        // let read_time = Instant::now();
+        match mmap_file_read(path) {
             Ok(file) => {
+                // log::debug!("read_file {:?}", read_time.elapsed());
+                // let mut start = Instant::now();
                 let tree = parser.parse(&file, None).unwrap();
+                // log::debug!("parse time {:?}", start.elapsed());
+                // start = Instant::now();
                 let mut position_list = vec![];
                 let root_node = tree.root_node();
                 traverse_scss_file(root_node, &mut vec![], &file, &mut position_list);
+                // log::debug!("traverse scss file {:?}", start.elapsed());
                 scss_class_map.insert(path.to_string(), position_list);
             }
             Err(_) => {}
@@ -533,6 +539,17 @@ pub fn insert_position_list(
     }
 }
 
+fn mmap_file_read(path: &str) -> std::io::Result<Vec<u8>> {
+    let file = File::open(path)?;
+
+    let mmap = unsafe { Mmap::map(&file).expect("failed to map the file") };
+    let mut reader = Box::new(&mmap[..]);
+    let mut buf = Vec::with_capacity(mmap.len());
+    let mut buf_reader = std::io::BufReader::new(reader.as_mut());
+    buf_reader.read_to_end(&mut buf)?;
+    Ok(buf)
+    // reader.concat()
+}
 pub fn remove_position_list(
     path: &str,
     scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
