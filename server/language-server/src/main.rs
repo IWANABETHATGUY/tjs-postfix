@@ -1,18 +1,19 @@
 use dashmap::DashMap;
 use ignore::Walk;
 use lspower::{LspService, Server};
-use std::{ffi::OsStr, fs::read_to_string, path::Path, time::Instant};
-use tree_sitter::{Node, Parser, Point};
+use std::{time::Instant};
+use tree_sitter::{Parser};
 
 use crossbeam_channel::unbounded;
-use notify::{event::ModifyKind, Config, RecommendedWatcher, RecursiveMode, Result, Watcher};
+use notify::{
+    event::ModifyKind, Config, RecommendedWatcher, RecursiveMode, Result, Watcher,
+};
 
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex as StdMutex},
-    time::Duration,
 };
-use tjs_language_server::{insert_position_list, remove_position_list, Backend};
+use tjs_language_server::{insert_position_list, remove_position_list, Backend, Job};
 use tokio::sync::Mutex;
 
 use tree_sitter_typescript::language_tsx;
@@ -26,6 +27,8 @@ async fn main() {
     let tsx_lang = language_tsx();
     let mut tsx_parser = tree_sitter::Parser::new();
     tsx_parser.set_language(tsx_lang).unwrap();
+
+    let (mut tx, rx) = unbounded::<Job>();
     let scss_class_map = Arc::new(DashMap::new());
     let (service, messages) = LspService::new(|client| {
         let document_map = Mutex::new(HashMap::new());
@@ -38,6 +41,7 @@ async fn main() {
             postfix_template_list,
             parse_tree_map,
             scss_class_map.clone(),
+            tx.clone(),
         )
     });
 
@@ -60,21 +64,21 @@ async fn main() {
                     Err(err) => log::debug!("ERROR: {}", err),
                 }
             }
-            log::debug!("found {:?} css/scss file", scss_class_map.len());
-            let (tx, rx) = unbounded();
+            log::debug!("found {:?} css/scss/less file", scss_class_map.len());
             let mut watcher = RecommendedWatcher::new(move |e| match e {
                 Ok(e) => {
-                    tx.send(e).unwrap();
+                    tx.send(Job::Event(e)).unwrap();
                 }
                 Err(err) => {}
             })?;
+            // std::mem::drop(&mut tx);
             // Add a path to be watched. All files and directories at that path and
             // below will be monitored for changes.
             watcher.watch(&work_dir, RecursiveMode::Recursive)?;
             watcher.configure(Config::NoticeEvents(true))?;
             loop {
                 match rx.recv() {
-                    Ok(e) => {
+                    Ok(Job::Event(e)) => {
                         let path_list = e
                             .paths
                             .into_iter()
@@ -93,9 +97,7 @@ async fn main() {
                                 });
                                 log::debug!("reanalyze crate scss file cost {:?}", now.elapsed());
                             }
-                            notify::EventKind::Modify(kind)
-                                if matches!(kind, ModifyKind::Data(_)) =>
-                            {
+                            notify::EventKind::Modify(ModifyKind::Data(a)) => {
                                 let now = Instant::now();
                                 path_list.into_iter().for_each(|p| {
                                     insert_position_list(&p, &mut parser, scss_class_map.clone());
@@ -103,7 +105,7 @@ async fn main() {
                                 log::debug!(
                                     "reanalyze modify scss file cost {:?}, kind: {:?}",
                                     now.elapsed(),
-                                    kind
+                                    a
                                 );
                             }
                             notify::EventKind::Remove(kind) => {
@@ -114,6 +116,9 @@ async fn main() {
                             _ => {}
                         }
                         // println!("{:?}", e);
+                    }
+                    Ok(Job::Shutdown) => {
+                        break;
                     }
                     Err(_) => todo!(),
                 }

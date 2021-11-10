@@ -1,3 +1,4 @@
+use crossbeam_channel::Sender;
 use dashmap::DashMap;
 use inflector::Inflector;
 use lsp_text_document::FullTextDocument;
@@ -9,6 +10,8 @@ use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex;
 use tree_sitter::Point;
 use tree_sitter::{Node, Parser, Tree};
+
+use crate::Job;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +33,7 @@ pub struct Backend {
     postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
     pub workspace_folder: Mutex<Vec<WorkspaceFolder>>,
     pub scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
+    pub job_sender: Sender<Job>,
 }
 impl Backend {
     pub fn new(
@@ -39,6 +43,7 @@ impl Backend {
         postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
         parse_tree_map: Mutex<HashMap<String, Tree>>,
         scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
+        job_sender: Sender<Job>,
     ) -> Self {
         Self {
             client,
@@ -48,6 +53,7 @@ impl Backend {
             parse_tree_map,
             workspace_folder: Mutex::new(vec![]),
             scss_class_map, // w    pub workspace_folders: Option<Vec<WorkspaceFolder>>,
+            job_sender
         }
     }
 
