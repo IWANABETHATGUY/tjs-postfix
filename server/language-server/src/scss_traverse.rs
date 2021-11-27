@@ -72,10 +72,7 @@ fn traverse_class_selector(
     position_list: &mut Vec<(String, Point)>,
     new_top: &mut Vec<String>,
 ) {
-    let selector_content = selector
-        .utf8_text(source_code)
-        .unwrap()
-        .to_string();
+    let selector_content = selector.utf8_text(source_code).unwrap().to_string();
     let has_nested = selector_content.starts_with("&");
     if has_nested {
         // let partial = &class_name_content[1..];

@@ -53,7 +53,7 @@ impl Backend {
             parse_tree_map,
             workspace_folder: Mutex::new(vec![]),
             scss_class_map, // w    pub workspace_folders: Option<Vec<WorkspaceFolder>>,
-            job_sender
+            job_sender,
         }
     }
 
