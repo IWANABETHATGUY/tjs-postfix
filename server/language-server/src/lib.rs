@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fs::read_to_string;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
@@ -98,7 +97,6 @@ impl LanguageServer for Backend {
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
-
         self.job_sender.send(Job::Shutdown).unwrap();
         Ok(())
     }
@@ -176,23 +174,30 @@ impl LanguageServer for Backend {
                 let click_byte = document.rope.char_to_byte(char_index);
                 let node = root.named_descendant_for_byte_range(click_byte, click_byte);
                 if let Some(click_node) = node {
-                    log::debug!("jump definition {:?}", click_node.kind());
-                    let parent = if click_node.kind() == "string_fragment"
-                        && click_node.parent().is_some()
-                    {
-                        click_node.parent().unwrap()
-                    } else {
-                        log::error!("current node kind is not string_fragment");
+                    // log::debug!("jump definition {:?}", click_node.kind());
+                    // get latest jsx_attribute
+                    if !matches!(click_node.kind(), "string_fragment" | "template_string") {
                         return Ok(None);
+                    }
+                    let attribute = {
+                        let mut cur = click_node;
+                        loop {
+                            if cur.kind() == "jsx_attribute" {
+                                break;
+                            } else if cur.parent().is_none()
+                                || matches!(
+                                    cur.parent().unwrap().kind(),
+                                    "ERROR" | "jsx_element" | "jsx_self_closing_element"
+                                )
+                            {
+                                return Ok(None);
+                            } else {
+                                cur = cur.parent().unwrap();
+                            }
+                        }
+                        cur
                     };
-                    let attribute = if parent.kind() == "string"
-                        && parent.parent().unwrap().kind() == "jsx_attribute"
-                    {
-                        parent.parent().unwrap()
-                    } else {
-                        log::error!("parent node kind is not  jsx_attribute");
-                        return Ok(None);
-                    };
+
                     match attribute.child(0) {
                         Some(prop) if prop.kind() == "property_identifier" => {
                             let document_content = document.rope.to_string();
@@ -203,7 +208,12 @@ impl LanguageServer for Backend {
                                 log::error!("is not className");
                                 return Ok(None);
                             }
-                            let click_range = click_node.byte_range();
+                            let click_range = if click_node.kind() == "string_fragment" {
+                                click_node.byte_range()
+                            } else {
+                                let range = click_node.byte_range();
+                                range.start + 1..range.end - 1
+                            };
                             let click_range_start = click_range.start;
                             let slice = &document_content[click_range];
 
@@ -453,11 +463,28 @@ impl LanguageServer for Backend {
                             Point::new(pos.line as usize, pos.character as usize),
                         );
                         if let Some(node) = node {
-                            if node.kind() == "string"
-                                && node.parent().unwrap().kind() == "jsx_attribute"
-                            {
-                                let attr = node.parent().unwrap();
-                                match attr.child(0) {
+                            if matches!(node.kind(), "string" | "template_string") {
+                                let attribute = {
+                                    let mut cur = node;
+                                    loop {
+                                        if cur.kind() == "jsx_attribute" {
+                                            break;
+                                        } else if cur.parent().is_none()
+                                            || matches!(
+                                                cur.parent().unwrap().kind(),
+                                                "ERROR"
+                                                    | "jsx_element"
+                                                    | "jsx_self_closing_element"
+                                            )
+                                        {
+                                            return Ok(None);
+                                        } else {
+                                            cur = cur.parent().unwrap();
+                                        }
+                                    }
+                                    cur
+                                };
+                                match attribute.child(0) {
                                     Some(prop) if prop.kind() == "property_identifier" => {
                                         if !matches!(
                                             &document.rope.to_string()[prop.byte_range()],

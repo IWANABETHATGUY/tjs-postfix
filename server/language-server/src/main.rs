@@ -1,13 +1,11 @@
 use dashmap::DashMap;
 use ignore::Walk;
 use lspower::{LspService, Server};
-use std::{time::Instant};
-use tree_sitter::{Parser};
+use std::time::Instant;
+use tree_sitter::Parser;
 
 use crossbeam_channel::unbounded;
-use notify::{
-    event::ModifyKind, Config, RecommendedWatcher, RecursiveMode, Result, Watcher,
-};
+use notify::{event::ModifyKind, Config, RecommendedWatcher, RecursiveMode, Result, Watcher};
 
 use std::{
     collections::HashMap,
