@@ -18,13 +18,13 @@
 - [x] .new	new expr()
 
 ## feature
-1. postfix
+### postfix
 ![postfix](https://raw.githubusercontent.com/IWANABETHATGUY/tjs-postfix/master/assets/postfix.gif)
-2. codeAction
+### codeAction
 ![codeAction](https://raw.githubusercontent.com/IWANABETHATGUY/tjs-postfix/master/assets/codeAction.gif)
-3. extract-component
+### extract-component
 ![extract-component](https://github.com/IWANABETHATGUY/tjs-postfix/blob/master/assets/extract-component.gif?raw=true)
-4. component-symbol
+### component-symbol
 ![component-symbol](https://github.com/IWANABETHATGUY/tjs-postfix/blob/master/assets/component-symbol.gif?raw=true)
-5. scss/css completion and jump to definition
+### scss/css completion and jump to definition
 ![scss-enhancement](https://github.com/IWANABETHATGUY/tjs-postfix/blob/master/assets/scss-completion-jump.gif?raw=true)
