@@ -149,6 +149,11 @@ impl Backend {
                 replace_string_generator: Box::new(|name| format!("var ${{0}} = {}", name)),
             },
             SnippetCompletionItem {
+                label: String::from("call"),
+                detail: String::from("call(expr)"),
+                replace_string_generator: Box::new(|name| format!("${{0}}({})", name)),
+            },
+            SnippetCompletionItem {
                 label: String::from("let"),
                 detail: String::from("let name = expr"),
                 replace_string_generator: Box::new(|name| format!("let ${{0}} = {}", name)),
