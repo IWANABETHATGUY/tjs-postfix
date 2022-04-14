@@ -1,5 +1,5 @@
 [package]
-authors = ["IWANABETHATGUY <974153916@qq.com>"]
+authors = ["IWANABETHATGUY <iwanabethatguy@qq.com>"]
 edition = "2018"
 name = "tjs-language-server"
 version = "0.1.0"
