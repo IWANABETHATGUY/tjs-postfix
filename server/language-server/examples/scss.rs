@@ -127,12 +127,3 @@ fn pretty_print(source_code: &str, root: Node, level: usize) {
     }
 }
 
-// .btn {
-//   width: 100px;
-// }
-// .btn-test.result.fuck, .btn-tes.that-shit {
-//   height: 10px;
-// }
-// .btn-test.result.fuck-result, .btn-tes.that-shit-result {
-//   color: #ccc;
-// }

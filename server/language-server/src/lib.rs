@@ -13,6 +13,7 @@ use lsp_text_document::lsp_types;
 use lsp_text_document::FullTextDocument;
 use lsp_types::Url;
 use lspower::jsonrpc;
+use lspower::jsonrpc::Error;
 use lspower::jsonrpc::Result;
 use lspower::lsp::*;
 use lspower::LanguageServer;
@@ -274,7 +275,11 @@ impl LanguageServer for Backend {
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let mut code_action_result = CodeActionResponse::new();
-        get_function_call_action(&self, params.clone(), &mut code_action_result).await?;
+        code_action_result.extend(
+            get_function_call_action(&self, params.clone())
+                .await
+                .unwrap_or_default(),
+        );
         extract_component_action(&self, params, &mut code_action_result).await?;
         Ok(Some(code_action_result))
     }

@@ -5,12 +5,12 @@ use std::{
 
 use log::debug;
 use lsp_text_document::lsp_types::{
-    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, Position, Range, TextEdit,
-    WorkspaceEdit,
+    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionResponse,
+    Position, Range, TextEdit, WorkspaceEdit,
 };
 use lspower::jsonrpc::Result;
 use serde::{Deserialize, Serialize};
-use tree_sitter::{Language, Node, Parser, Query, QueryCursor, Tree};
+use tree_sitter::{Language, Node, Parser, Point, Query, QueryCursor, Tree};
 
 use crate::{helper::generate_lsp_range, query_pattern::FUNCTION_LIKE_DECLARATION, Backend};
 #[derive(Serialize, Deserialize)]
@@ -31,87 +31,75 @@ pub struct ExtractComponentData {
 pub async fn get_function_call_action(
     back_end: &Backend,
     params: CodeActionParams,
-    code_action: &mut Vec<CodeActionOrCommand>,
-) -> Result<()> {
-    if let Some(document) = back_end
-        .document_map
-        .lock()
-        .await
-        .get(&params.text_document.uri.to_string())
-    {
-        let map = back_end.parse_tree_map.lock().await;
-        if let Some(tree) = map.get(&params.text_document.uri.to_string()) {
-            let duration = Instant::now();
-            let root = tree.root_node();
-            let range = params.range;
-            let start = range.start;
-            let end = range.end;
+) -> Option<CodeActionResponse> {
+    let mut ret = CodeActionResponse::new();
+    let document_map = back_end.document_map.lock().await;
+    let document = document_map.get(&params.text_document.uri.to_string())?;
 
-            let start_char =
-                document.rope.line_to_char(start.line as usize) + start.character as usize;
-            let end_char = document.rope.line_to_char(end.line as usize) + end.character as usize;
-            let start_byte = document.rope.char_to_byte(start_char);
-            let end_byte = document.rope.char_to_byte(end_char);
+    let map = back_end.parse_tree_map.lock().await;
+    let tree = map.get(&params.text_document.uri.to_string())?;
+    let duration = Instant::now();
+    let root = tree.root_node();
+    let range = params.range;
+    let start = range.start;
+    let end = range.end;
 
-            let start_node = root.named_descendant_for_byte_range(start_byte, start_byte);
-            let end_node = root.named_descendant_for_byte_range(end_byte, end_byte);
-            if start_node.is_none() || end_node.is_none() {
-                return Ok(());
-            }
-            let start_node = start_node.unwrap();
-            let end_node = end_node.unwrap();
-            if start_node.kind() != "property_identifier"
-                || end_node.kind() != "property_identifier"
-            {
-                return Ok(());
-            }
-            match (start_node.parent(), end_node.parent()) {
-                (Some(sp), Some(ep))
-                    if sp.kind() == "member_expression" && ep.kind() == "member_expression" =>
-                {
-                    let start_object_node = sp.child_by_field_name("object");
-                    let end_object_node = ep.child_by_field_name("object");
-                    if let (Some(start), Some(_)) = (start_object_node, end_object_node) {
-                        let replace_range = generate_lsp_range(
-                            ep.start_position().row as u32,
-                            ep.start_position().column as u32,
-                            ep.end_position().row as u32,
-                            ep.end_position().column as u32,
-                        );
-                        let document_source = document.rope.to_string();
-                        let object_source_code = &document_source[start.byte_range()];
-
-                        let function =
-                            &document_source[start_node.start_byte()..end_node.end_byte()];
-
-                        let replaced_code = format!("{}({})", function, object_source_code);
-
-                        let edit = TextEdit::new(replace_range, replaced_code.clone());
-                        let mut changes = HashMap::new();
-                        changes.insert(params.text_document.uri, vec![edit]);
-                        code_action.push(CodeActionOrCommand::CodeAction(CodeAction {
-                            title: format!("call this function -> {}", replaced_code),
-                            kind: Some(CodeActionKind::REFACTOR_REWRITE),
-                            diagnostics: None,
-                            edit: Some(WorkspaceEdit::new(changes)),
-                            command: None,
-                            is_preferred: Some(false),
-                            disabled: None,
-                            data: None,
-                        }));
-                    } else {
-                        return Ok(());
-                    }
-                }
-                _ => {
-                    return Ok(());
-                }
-            }
-            debug!("code-action: {:?}", duration.elapsed());
-            return Ok(());
-        }
+    // debug!("range_string, {:?}", document.rope.get_slice(star..end_char));
+    // let start_char =
+    //     document.rope.try_line_to_char(start.line as usize).ok()? + start.character as usize;
+    // let end_char = document.rope.try_line_to_byte(end.line as usize).ok()? + end.character as usize;
+    // let start_byte = document.rope.try_char_to_byte(start_char).ok()?;
+    // let end_byte = document.rope.try_char_to_byte(end_char).ok()?;
+    // debug!("text: {}", &document.get_text()[start_byte..end_byte]);
+    let start_node = root.named_descendant_for_point_range(
+        Point::new(start.line as usize, start.character as usize),
+        Point::new(start.line as usize, start.character as usize + 1),
+    )?;
+    let end_node = root.named_descendant_for_point_range(
+        Point::new(end.line as usize, end.character as usize),
+        Point::new(end.line as usize, end.character  as usize + 1),
+    )?;
+    let sp = start_node.parent()?;
+    let ep = end_node.parent()?;
+    if sp.kind() != "member_expression" || ep.kind() != "member_expression" {
+        return None;
     }
-    Ok(())
+
+    let start_object_node = sp.child_by_field_name("object");
+    let end_object_node = ep.child_by_field_name("object");
+    if let (Some(start), Some(_)) = (start_object_node, end_object_node) {
+        let replace_range = generate_lsp_range(
+            ep.start_position().row as u32,
+            ep.start_position().column as u32,
+            ep.end_position().row as u32,
+            ep.end_position().column as u32,
+        );
+        // debug!("sp_parent: {}, ep_parent: {}", sp.kind(), ep.kind());
+        let document_source = document.rope.to_string();
+        let object_source_code = &document_source[start.byte_range()];
+
+        let function = &document_source[start_node.start_byte()..end_node.end_byte()];
+
+        let replaced_code = format!("{}({})", function, object_source_code);
+
+        let edit = TextEdit::new(replace_range, replaced_code.clone());
+        let mut changes = HashMap::new();
+        changes.insert(params.text_document.uri, vec![edit]);
+        ret.push(CodeActionOrCommand::CodeAction(CodeAction {
+            title: format!("call this function -> {}", replaced_code),
+            kind: Some(CodeActionKind::REFACTOR_REWRITE),
+            diagnostics: None,
+            edit: Some(WorkspaceEdit::new(changes)),
+            command: None,
+            is_preferred: Some(false),
+            disabled: None,
+            data: None,
+        }));
+    }
+
+    debug!("code-action: {:?}", duration.elapsed());
+
+    Some(ret)
 }
 
 pub async fn extract_component_action(
