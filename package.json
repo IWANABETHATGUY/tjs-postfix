@@ -70,14 +70,15 @@
     }
   },
   "scripts": {
-    "postinstall": "cd client && yarn && cd .. && cd ts-server && yarn && cd ..",
-    "vscode:prepublish": "yarn run build",
+    "postinstall": "cd client && pnpm i && cd .. && cd ts-server && pnpm i && cd ..",
+    "vscode:prepublish": "pnpm run build",
     "compile": "cross-env NODE_ENV=production tsc -b",
     "watch": "tsc -b -w",
     "lint": "eslint src --ext ts",
-    "pretest": "yarn run compile && yarn run lint",
+    "pretest": "pnpm run compile && pnpm run lint",
     "test": "node ./out/test/runTest.js",
-    "build": "webpack --config webpack.config.js"
+    "build": "webpack --config webpack.config.js",
+    "format": "rome format client/src --write"
   },
   "devDependencies": {
     "@types/glob": "^7.1.3",
