@@ -19,7 +19,8 @@ use lspower::lsp::*;
 use lspower::LanguageServer;
 use memmap2::Mmap;
 use notification::{AstPreviewRequestParams, CustomNotification, CustomNotificationParams};
-use notify::Event;
+use notify_debouncer_mini::DebouncedEvent;
+use notify_debouncer_mini::notify;
 use serde_json::Value;
 
 mod backend;
@@ -35,7 +36,7 @@ use document_symbol::get_component_symbol;
 use tree_sitter::{Parser, Point};
 
 pub enum Job {
-    Event(Event),
+    Event(DebouncedEvent),
     Shutdown,
 }
 

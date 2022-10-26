@@ -1,7 +1,8 @@
 use dashmap::DashMap;
 use ignore::Walk;
 use lspower::{LspService, Server};
-use std::time::Instant;
+use notify_debouncer_mini::{notify, new_debouncer, DebounceEventResult};
+use std::time::{Instant, Duration};
 use tree_sitter::Parser;
 
 use crossbeam_channel::unbounded;
@@ -63,22 +64,34 @@ async fn main() {
                 }
             }
             log::debug!("found {:?} css/scss/less file", scss_class_map.len());
-            let mut watcher = RecommendedWatcher::new(move |e| match e {
-                Ok(e) => {
-                    tx.send(Job::Event(e)).unwrap();
+            let config = Config::default();
+
+            // let mut watcher = RecommendedWatcher::new(move |e| match e {
+            //     Ok(e) => {
+            //         tx.send(Job::Event(e)).unwrap();
+            //     }
+            //     Err(err) => {}
+            // })?;
+            let mut debouncer = new_debouncer(Duration::from_secs(2), None, |res: DebounceEventResult| {
+                match res {
+                    Ok(events) => events.iter().for_each(|e| {
+                        tx.send(Job::Event(e.clone())).unwrap();
+                    }),
+                    Err(errors) => errors.iter().for_each(|e|println!("Error {:?}",e)),
                 }
-                Err(err) => {}
-            })?;
+            }).unwrap();
+            debouncer.watcher().watch(&work_dir, RecursiveMode::Recursive).unwrap();
+
             // std::mem::drop(&mut tx);
             // Add a path to be watched. All files and directories at that path and
             // below will be monitored for changes.
-            watcher.watch(&work_dir, RecursiveMode::Recursive)?;
-            watcher.configure(Config::NoticeEvents(true))?;
+            // watcher.watch(&work_dir, RecursiveMode::Recursive)?;
+            // watcher.configure(Config::NoticeEvents(true))?;
             loop {
                 match rx.recv() {
                     Ok(Job::Event(e)) => {
                         let path_list = e
-                            .paths
+                            .path
                             .into_iter()
                             .filter_map(|item| {
                                 item.canonicalize()
