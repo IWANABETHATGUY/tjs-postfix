@@ -1,14 +1,9 @@
-use std::fmt::format;
-
 use inflector::Inflector;
-use log::debug;
-use lsp_text_document::lsp_types::{
-    CompletionItem, CompletionItemKind, Documentation, InsertTextFormat, Range, TextEdit,
-};
 use tokio::sync::MutexGuard;
+use tower_lsp::lsp_types::*;
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor, Tree};
 
-use crate::{query_pattern::REACT_NAME_SPACE_IMPORT, Backend};
+use crate::query_pattern::REACT_NAME_SPACE_IMPORT;
 
 pub fn get_react_completion(
     name: &str,
@@ -37,7 +32,7 @@ pub fn get_react_completion(
         "state".to_string(),
         format!("const [<expr>, <expr>] = {}()", function_call),
     );
-    item.kind = Some(CompletionItemKind::Snippet);
+    item.kind = Some(CompletionItemKind::SNIPPET);
     let replace_string = format!(
         "const [{}, set{}] = {}(${{0}})",
         name,
@@ -46,7 +41,7 @@ pub fn get_react_completion(
     );
     item.documentation = Some(Documentation::String(replace_string.clone()));
     item.insert_text = Some(replace_string);
-    item.insert_text_format = Some(InsertTextFormat::Snippet);
+    item.insert_text_format = Some(InsertTextFormat::SNIPPET);
     item.additional_text_edits = Some(vec![TextEdit::new(replace_range.clone(), "".into())]);
     result.push(item);
     result

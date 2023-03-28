@@ -1,13 +1,12 @@
 use crossbeam_channel::Sender;
 use dashmap::DashMap;
-use inflector::Inflector;
 use lsp_text_document::FullTextDocument;
-use lspower::{lsp::*, Client};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex;
+use tower_lsp::{lsp_types::*, Client};
 use tree_sitter::Point;
 use tree_sitter::{Node, Parser, Tree};
 
@@ -93,7 +92,7 @@ impl Backend {
                         template_item.snippet_key.clone(),
                         template_item.function_name.clone(),
                     );
-                    item.kind = Some(CompletionItemKind::Snippet);
+                    item.kind = Some(CompletionItemKind::SNIPPET);
                     let replace_string =
                         format!("{}({})", &template_item.function_name, source_code);
                     item.documentation = Some(Documentation::String(replace_string.clone()));
@@ -224,8 +223,8 @@ impl Backend {
             .into_iter()
             .map(|snippet| {
                 let mut item = CompletionItem::new_simple(snippet.label, snippet.detail);
-                item.insert_text_format = Some(InsertTextFormat::Snippet);
-                item.kind = Some(CompletionItemKind::Snippet);
+                item.insert_text_format = Some(InsertTextFormat::SNIPPET);
+                item.kind = Some(CompletionItemKind::SNIPPET);
                 let replace_string = (snippet.replace_string_generator)(source_code.to_string());
                 item.documentation = Some(Documentation::String(replace_string.clone()));
 

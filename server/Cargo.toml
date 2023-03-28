@@ -1,5 +1,2 @@
 [workspace]
-members = ["language-server"]
-
-[profile.dev]
-debug = false
+members = ["crates/*"]

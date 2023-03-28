@@ -1,6 +1,6 @@
-[submodule "server/tree-sitter-plugin/tree-sitter-typescript"]
-	path = server/tree-sitter-plugin/tree-sitter-typescript
+[submodule "server/crates/tree-sitter-plugin/tree-sitter-typescript"]
+	path = server/crates/tree-sitter-plugin/tree-sitter-typescript
 	url = git@github.com:tree-sitter/tree-sitter-typescript.git
-[submodule "server/tree-sitter-plugin/tree-sitter-scss"]
-	path = server/tree-sitter-plugin/tree-sitter-scss
+[submodule "server/crates/tree-sitter-plugin/tree-sitter-scss"]
+	path = server/crates/tree-sitter-plugin/tree-sitter-scss
 	url = https://github.com/serenadeai/tree-sitter-scss

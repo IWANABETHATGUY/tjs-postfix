@@ -1,4 +1,3 @@
-use lspower::lsp::notification::Notification;
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CustomNotificationParams {
@@ -21,9 +20,3 @@ impl CustomNotificationParams {
 }
 
 pub enum CustomNotification {}
-
-impl Notification for CustomNotification {
-    type Params = CustomNotificationParams;
-
-    const METHOD: &'static str = "tjs-postfix/notification";
-}

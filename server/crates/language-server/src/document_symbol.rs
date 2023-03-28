@@ -3,7 +3,7 @@ use lsp_text_document::lsp_types::{
     SymbolKind,
 };
 
-use lspower::jsonrpc::Result;
+use tower_lsp::jsonrpc;
 use tree_sitter::{Query, QueryCursor};
 
 use crate::{query_pattern::DOCUMENT_SYMBOL_QUERY_PATTERN, Backend};
@@ -11,7 +11,7 @@ use crate::{query_pattern::DOCUMENT_SYMBOL_QUERY_PATTERN, Backend};
 pub async fn get_component_symbol(
     backend: &Backend,
     params: DocumentSymbolParams,
-) -> Result<Option<DocumentSymbolResponse>> {
+) -> jsonrpc::Result<Option<DocumentSymbolResponse>> {
     if let Some(document) = backend
         .document_map
         .lock()
@@ -40,7 +40,7 @@ pub async fn get_component_symbol(
                     if let Ok(name) = current_node.utf8_text(source_bytes) {
                         symbol_infos.push(SymbolInformation {
                             name: name.to_string(),
-                            kind: SymbolKind::Operator,
+                            kind: SymbolKind::OPERATOR,
                             tags: None,
                             location: Location {
                                 uri: params.text_document.uri.clone(),

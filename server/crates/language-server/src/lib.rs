@@ -8,20 +8,14 @@ pub use backend::TreeWrapper;
 use dashmap::DashMap;
 use helper::get_tree_sitter_edit_from_change;
 // use helper::get_tree_sitter_edit_from_change;
+use jsonrpc::Result;
 use log::debug;
-use lsp_text_document::lsp_types;
 use lsp_text_document::FullTextDocument;
-use lsp_types::Url;
-use lspower::jsonrpc;
-use lspower::jsonrpc::Error;
-use lspower::jsonrpc::Result;
-use lspower::lsp::*;
-use lspower::LanguageServer;
 use memmap2::Mmap;
 use notification::{AstPreviewRequestParams, CustomNotification, CustomNotificationParams};
 use notify::Event;
 use serde_json::Value;
-
+use tower_lsp::{jsonrpc, lsp_types::*, LanguageServer};
 mod backend;
 mod code_action;
 mod completion;
@@ -43,15 +37,15 @@ use crate::helper::generate_lsp_range;
 use crate::scss_traverse::traverse_scss_file;
 use code_action::{extract_component_action, get_function_call_action};
 use completion::get_react_completion;
-#[lspower::async_trait]
+#[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> jsonrpc::Result<InitializeResult> {
         // *self.workspace_folder.lock().await = params.workspace_folders.unwrap_or(vec![]);
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Incremental,
+                    TextDocumentSyncKind::INCREMENTAL,
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
@@ -62,15 +56,14 @@ impl LanguageServer for Backend {
                     ]),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
+                    completion_item: None,
                 }),
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: vec![],
                     work_done_progress_options: Default::default(),
                 }),
 
-                code_action_provider: Some(
-                    lsp_text_document::lsp_types::CodeActionProviderCapability::Simple(true),
-                ),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
 
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace: Some(WorkspaceServerCapabilities {
@@ -93,7 +86,7 @@ impl LanguageServer for Backend {
     async fn initialized(&self, _: InitializedParams) {
         self.reset_templates().await;
         self.client
-            .log_message(MessageType::Info, "initialized!")
+            .log_message(MessageType::INFO, "initialized!")
             .await;
     }
 
@@ -102,54 +95,54 @@ impl LanguageServer for Backend {
         Ok(())
     }
 
-    async fn request_else(
-        &self,
-        method: &str,
-        _params: Option<serde_json::Value>,
-    ) -> jsonrpc::Result<Option<serde_json::Value>> {
-        if method == "tjs-postfix/ast-preview" {
-            if let Some(params) = _params {
-                let param = serde_json::from_value::<AstPreviewRequestParams>(params).unwrap();
-                let path_ast_tuple =
-                    if let Some(tree) = self.parse_tree_map.lock().await.get(&param.path) {
-                        Some((param.path, format!("{}", TreeWrapper(tree.clone(),))))
-                    } else {
-                        None
-                    };
-                if let Some((path, ast_string)) = path_ast_tuple {
-                    self.client
-                        .send_custom_notification::<CustomNotification>(
-                            CustomNotificationParams::new(path, ast_string),
-                        )
-                        .await;
-                }
-            }
-        }
-        Ok(None)
-    }
+    // async fn request_else(
+    //     &self,
+    //     method: &str,
+    //     _params: Option<serde_json::Value>,
+    // ) -> jsonrpc::Result<Option<serde_json::Value>> {
+    //     if method == "tjs-postfix/ast-preview" {
+    //         if let Some(params) = _params {
+    //             let param = serde_json::from_value::<AstPreviewRequestParams>(params).unwrap();
+    //             let path_ast_tuple =
+    //                 if let Some(tree) = self.parse_tree_map.lock().await.get(&param.path) {
+    //                     Some((param.path, format!("{}", TreeWrapper(tree.clone(),))))
+    //                 } else {
+    //                     None
+    //                 };
+    //             if let Some((path, ast_string)) = path_ast_tuple {
+    //                 self.client
+    //                     .send_custom_notification::<CustomNotification>(
+    //                         CustomNotificationParams::new(path, ast_string),
+    //                     )
+    //                     .await;
+    //             }
+    //         }
+    //     }
+    //     Ok(None)
+    // }
 
     async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
         self.client
-            .log_message(MessageType::Info, "workspace folders changed!")
+            .log_message(MessageType::INFO, "workspace folders changed!")
             .await;
     }
 
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
         self.reset_templates().await;
         self.client
-            .log_message(MessageType::Info, "configuration changed!")
+            .log_message(MessageType::INFO, "configuration changed!")
             .await;
     }
 
     async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
         self.client
-            .log_message(MessageType::Info, "watched files have changed!")
+            .log_message(MessageType::INFO, "watched files have changed!")
             .await;
     }
     async fn goto_definition(
         &self,
         params: GotoDefinitionParams,
-    ) -> lspower::jsonrpc::Result<Option<lsp_types::GotoDefinitionResponse>> {
+    ) -> jsonrpc::Result<Option<GotoDefinitionResponse>> {
         if let Some(document) = self.document_map.lock().await.get(
             &params
                 .text_document_position_params
@@ -247,9 +240,7 @@ impl LanguageServer for Backend {
                                         }
                                     }
                                 }
-                                return Ok(Some(lsp_types::GotoDefinitionResponse::Array(
-                                    locations,
-                                )));
+                                return Ok(Some(GotoDefinitionResponse::Array(locations)));
                             } else {
                                 return Ok(None);
                             }
@@ -258,7 +249,7 @@ impl LanguageServer for Backend {
                     }
 
                     // self.client
-                    //     .log_message(MessageType::Info, node.kind())
+                    //     .log_message(MessageType::INFO, node.kind())
                     //     .await;
                 }
             };
@@ -266,10 +257,15 @@ impl LanguageServer for Backend {
 
         Ok(None)
     }
+
+    // async fn document_symbol(
+    //     &self,
+    //     params: DocumentSymbolParams,
+    // ) -> Result<Option<DocumentSymbolResponse>> {
     async fn document_symbol(
         &self,
-        params: lsp_types::DocumentSymbolParams,
-    ) -> lspower::jsonrpc::Result<Option<lsp_types::DocumentSymbolResponse>> {
+        params: DocumentSymbolParams,
+    ) -> jsonrpc::Result<Option<DocumentSymbolResponse>> {
         get_component_symbol(&self, params).await
     }
 
@@ -286,7 +282,7 @@ impl LanguageServer for Backend {
 
     async fn execute_command(&self, _params: ExecuteCommandParams) -> Result<Option<Value>> {
         self.client
-            .log_message(MessageType::Info, "command executed!")
+            .log_message(MessageType::INFO, "command executed!")
             .await;
 
         Ok(None)
@@ -319,7 +315,7 @@ impl LanguageServer for Backend {
         {
             let mut parser = self.parser.lock().await;
             let mut parse_tree_map = self.parse_tree_map.lock().await;
-            let changes: Vec<lsp_types::TextDocumentContentChangeEvent> = params
+            let changes: Vec<TextDocumentContentChangeEvent> = params
                 .content_changes
                 .into_iter()
                 .map(|change| {
@@ -331,7 +327,7 @@ impl LanguageServer for Backend {
                             range.end.character as u32,
                         )
                     });
-                    lsp_types::TextDocumentContentChangeEvent {
+                    TextDocumentContentChangeEvent {
                         range,
                         range_length: change.range_length.and_then(|v| Some(v as u32)),
                         text: change.text,
@@ -512,13 +508,11 @@ impl LanguageServer for Backend {
                                     .map(|class| {
                                         let mut item =
                                             CompletionItem::new_simple(class.clone(), class);
-                                        item.kind = Some(CompletionItemKind::Class);
+                                        item.kind = Some(CompletionItemKind::CLASS);
                                         item
                                     })
                                     .collect::<Vec<_>>();
-                                return Ok(Some(
-                                    lsp_text_document::lsp_types::CompletionResponse::Array(result),
-                                ));
+                                return Ok(Some(CompletionResponse::Array(result)));
                             } else {
                                 return Ok(None);
                             };

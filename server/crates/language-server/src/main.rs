@@ -1,7 +1,7 @@
 use dashmap::DashMap;
 use ignore::Walk;
-use lspower::{LspService, Server};
 use std::time::Instant;
+use tower_lsp::{LspService, Server};
 use tree_sitter::Parser;
 
 use crossbeam_channel::unbounded;
@@ -28,7 +28,7 @@ async fn main() {
 
     let (mut tx, rx) = unbounded::<Job>();
     let scss_class_map = Arc::new(DashMap::new());
-    let (service, messages) = LspService::new(|client| {
+    let (service, socket) = LspService::new(|client| {
         let document_map = Mutex::new(HashMap::new());
         let parse_tree_map = Mutex::new(HashMap::new());
         let postfix_template_list = Arc::new(StdMutex::new(vec![]));
@@ -43,9 +43,7 @@ async fn main() {
         )
     });
 
-    let server = Server::new(stdin, stdout)
-        .interleave(messages)
-        .serve(service);
+    let server = Server::new(stdin, stdout, socket).serve(service);
 
     let scss_work_thread = tokio::task::spawn_blocking(move || -> Result<()> {
         // TODO: should use workdir of vscode
@@ -63,17 +61,21 @@ async fn main() {
                 }
             }
             log::debug!("found {:?} css/scss/less file", scss_class_map.len());
-            let mut watcher = RecommendedWatcher::new(move |e| match e {
-                Ok(e) => {
-                    tx.send(Job::Event(e)).unwrap();
-                }
-                Err(err) => {}
-            })?;
+            let mut watcher = RecommendedWatcher::new(
+                move |e| match e {
+                    Ok(e) => {
+                        tx.send(Job::Event(e)).unwrap();
+                    }
+                    Err(err) => {}
+                },
+                Config::default(),
+            )?;
             // std::mem::drop(&mut tx);
             // Add a path to be watched. All files and directories at that path and
             // below will be monitored for changes.
             watcher.watch(&work_dir, RecursiveMode::Recursive)?;
-            watcher.configure(Config::NoticeEvents(true))?;
+            // watcher.configure(Config::NoticeEvents(true))?;
+            watcher.configure(Config::default())?;
             loop {
                 match rx.recv() {
                     Ok(Job::Event(e)) => {

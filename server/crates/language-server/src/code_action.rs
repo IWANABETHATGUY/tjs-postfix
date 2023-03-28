@@ -5,12 +5,12 @@ use std::{
 
 use log::debug;
 use lsp_text_document::lsp_types::{
-    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionResponse,
-    Position, Range, TextEdit, WorkspaceEdit,
+    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionResponse, Range,
+    TextEdit, WorkspaceEdit,
 };
-use lspower::jsonrpc::Result;
 use serde::{Deserialize, Serialize};
-use tree_sitter::{Language, Node, Parser, Point, Query, QueryCursor, Tree};
+use tower_lsp::jsonrpc;
+use tree_sitter::{Language, Node, Point, Query, QueryCursor};
 
 use crate::{helper::generate_lsp_range, query_pattern::FUNCTION_LIKE_DECLARATION, Backend};
 #[derive(Serialize, Deserialize)]
@@ -57,7 +57,7 @@ pub async fn get_function_call_action(
     )?;
     let end_node = root.named_descendant_for_point_range(
         Point::new(end.line as usize, end.character as usize),
-        Point::new(end.line as usize, end.character  as usize + 1),
+        Point::new(end.line as usize, end.character as usize + 1),
     )?;
     let sp = start_node.parent()?;
     let ep = end_node.parent()?;
@@ -106,7 +106,7 @@ pub async fn extract_component_action(
     back_end: &Backend,
     params: CodeActionParams,
     code_action: &mut Vec<CodeActionOrCommand>,
-) -> Result<()> {
+) -> jsonrpc::Result<()> {
     if let Some(document) = back_end
         .document_map
         .lock()
