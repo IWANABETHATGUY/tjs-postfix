@@ -93,7 +93,7 @@ impl Backend {
                         template_item.code.clone(),
                     );
                     item.kind = Some(CompletionItemKind::SNIPPET);
-                    let replace_string = template_item.code.replace("$", source_code);
+                    let replace_string = template_item.code.replace("$$", source_code);
                     item.documentation = Some(Documentation::String(replace_string.clone()));
                     item.insert_text = Some(replace_string);
                     item.additional_text_edits =
