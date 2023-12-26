@@ -16,7 +16,7 @@ use crate::Job;
 #[serde(rename_all = "camelCase")]
 pub struct PostfixTemplate {
     snippet_key: String,
-    function_name: String,
+    code: String,
 }
 
 pub struct SnippetCompletionItem {
@@ -90,11 +90,10 @@ impl Backend {
                 .map(|template_item| {
                     let mut item = CompletionItem::new_simple(
                         template_item.snippet_key.clone(),
-                        template_item.function_name.clone(),
+                        template_item.code.clone(),
                     );
                     item.kind = Some(CompletionItemKind::SNIPPET);
-                    let replace_string =
-                        format!("{}({})", &template_item.function_name, source_code);
+                    let replace_string = template_item.code.replace("$", source_code);
                     item.documentation = Some(Documentation::String(replace_string.clone()));
                     item.insert_text = Some(replace_string);
                     item.additional_text_edits =
