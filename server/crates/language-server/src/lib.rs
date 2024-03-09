@@ -192,61 +192,61 @@ impl LanguageServer for Backend {
                         cur
                     };
 
-                    match attribute.child(0) {
-                        Some(prop) if prop.kind() == "property_identifier" => {
-                            let document_content = document.rope.to_string();
-                            if !matches!(
-                                &document_content[prop.byte_range()],
-                                "className" | "class"
-                            ) {
-                                log::error!("is not className");
-                                return Ok(None);
-                            }
-                            let click_range = if click_node.kind() == "string_fragment" {
-                                click_node.byte_range()
-                            } else {
-                                let range = click_node.byte_range();
-                                range.start + 1..range.end - 1
-                            };
-                            let click_range_start = click_range.start;
-                            let slice = &document_content[click_range];
-
-                            let word_range = get_word_range_of_string(slice);
-
-                            let range_index = word_range
-                                .iter()
-                                .find(|r| r.contains(&(click_byte - click_range_start)));
-                            if let Some(class_name) = range_index.map(|range| &slice[range.clone()])
-                            {
-                                let mut locations = vec![];
-                                for entry in self.scss_class_map.iter() {
-                                    let path = entry.key();
-                                    let point_list = entry.value();
-                                    for (name, position) in point_list {
-                                        if name == class_name {
-                                            locations.push(Location::new(
-                                                Url::parse(&format!("file://{}", path)).unwrap(),
-                                                Range::new(
-                                                    Position::new(
-                                                        position.row as u32,
-                                                        position.column as u32,
-                                                    ),
-                                                    Position::new(
-                                                        position.row as u32,
-                                                        position.column as u32,
-                                                    ),
-                                                ),
-                                            ));
-                                        }
-                                    }
-                                }
-                                return Ok(Some(GotoDefinitionResponse::Array(locations)));
-                            } else {
-                                return Ok(None);
-                            }
-                        }
-                        _ => (),
-                    }
+                    // match attribute.child(0) {
+                    //     Some(prop) if prop.kind() == "property_identifier" => {
+                    //         let document_content = document.rope.to_string();
+                    //         if !matches!(
+                    //             &document_content[prop.byte_range()],
+                    //             "className" | "class"
+                    //         ) {
+                    //             log::error!("is not className");
+                    //             return Ok(None);
+                    //         }
+                    //         let click_range = if click_node.kind() == "string_fragment" {
+                    //             click_node.byte_range()
+                    //         } else {
+                    //             let range = click_node.byte_range();
+                    //             range.start + 1..range.end - 1
+                    //         };
+                    //         let click_range_start = click_range.start;
+                    //         let slice = &document_content[click_range];
+                    //
+                    //         let word_range = get_word_range_of_string(slice);
+                    //
+                    //         let range_index = word_range
+                    //             .iter()
+                    //             .find(|r| r.contains(&(click_byte - click_range_start)));
+                    //         if let Some(class_name) = range_index.map(|range| &slice[range.clone()])
+                    //         {
+                    //             let mut locations = vec![];
+                    //             for entry in self.scss_class_map.iter() {
+                    //                 let path = entry.key();
+                    //                 let point_list = entry.value();
+                    //                 for (name, position) in point_list {
+                    //                     if name == class_name {
+                    //                         locations.push(Location::new(
+                    //                             Url::parse(&format!("file://{}", path)).unwrap(),
+                    //                             Range::new(
+                    //                                 Position::new(
+                    //                                     position.row as u32,
+                    //                                     position.column as u32,
+                    //                                 ),
+                    //                                 Position::new(
+                    //                                     position.row as u32,
+                    //                                     position.column as u32,
+                    //                                 ),
+                    //                             ),
+                    //                         ));
+                    //                     }
+                    //                 }
+                    //             }
+                    //             return Ok(Some(GotoDefinitionResponse::Array(locations)));
+                    //         } else {
+                    //             return Ok(None);
+                    //         }
+                    //     }
+                    //     _ => (),
+                    // }
 
                     // self.client
                     //     .log_message(MessageType::INFO, node.kind())
@@ -485,34 +485,35 @@ impl LanguageServer for Backend {
                                     }
                                     cur
                                 };
-                                match attribute.child(0) {
-                                    Some(prop) if prop.kind() == "property_identifier" => {
-                                        if !matches!(
-                                            &document.rope.to_string()[prop.byte_range()],
-                                            "className" | "class"
-                                        ) {
-                                            // log::debug!("is not className when completion");
-                                            return Ok(None);
-                                        }
-                                    }
-                                    _ => (),
-                                };
-                                let mut class_set = HashSet::new();
-                                for entry in self.scss_class_map.iter() {
-                                    for item in entry.value() {
-                                        class_set.insert(item.0.to_string());
-                                    }
-                                }
-                                let result = class_set
-                                    .into_iter()
-                                    .map(|class| {
-                                        let mut item =
-                                            CompletionItem::new_simple(class.clone(), class);
-                                        item.kind = Some(CompletionItemKind::CLASS);
-                                        item
-                                    })
-                                    .collect::<Vec<_>>();
-                                return Ok(Some(CompletionResponse::Array(result)));
+                                // match attribute.child(0) {
+                                //     Some(prop) if prop.kind() == "property_identifier" => {
+                                //         if !matches!(
+                                //             &document.rope.to_string()[prop.byte_range()],
+                                //             "className" | "class"
+                                //         ) {
+                                //             // log::debug!("is not className when completion");
+                                //             return Ok(None);
+                                //         }
+                                //     }
+                                //     _ => (),
+                                // };
+                                // let mut class_set = HashSet::new();
+                                // for entry in self.scss_class_map.iter() {
+                                //     for item in entry.value() {
+                                //         class_set.insert(item.0.to_string());
+                                //     }
+                                // }
+                                // let result = class_set
+                                //     .into_iter()
+                                //     .map(|class| {
+                                //         let mut item =
+                                //             CompletionItem::new_simple(class.clone(), class);
+                                //         item.kind = Some(CompletionItemKind::CLASS);
+                                //         item
+                                //     })
+                                //     .collect::<Vec<_>>();
+                                return Ok(None);
+                                // return Ok(Some(CompletionResponse::Array(result)));
                             } else {
                                 return Ok(None);
                             };

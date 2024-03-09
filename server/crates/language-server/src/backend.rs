@@ -31,7 +31,7 @@ pub struct Backend {
     pub(crate) parse_tree_map: Mutex<HashMap<String, Tree>>,
     postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
     pub workspace_folder: Mutex<Vec<WorkspaceFolder>>,
-    pub scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
+    // pub scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
     pub job_sender: Sender<Job>,
 }
 impl Backend {
@@ -41,7 +41,7 @@ impl Backend {
         parser: Mutex<Parser>,
         postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
         parse_tree_map: Mutex<HashMap<String, Tree>>,
-        scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
+        // scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
         job_sender: Sender<Job>,
     ) -> Self {
         Self {
@@ -51,7 +51,7 @@ impl Backend {
             postfix_template_list,
             parse_tree_map,
             workspace_folder: Mutex::new(vec![]),
-            scss_class_map, // w    pub workspace_folders: Option<Vec<WorkspaceFolder>>,
+            // scss_class_map, // w    pub workspace_folders: Option<Vec<WorkspaceFolder>>,
             job_sender,
         }
     }
