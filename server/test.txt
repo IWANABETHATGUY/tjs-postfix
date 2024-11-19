@@ -1,3 +1,0 @@
-Content-Length: 67
-
-{"jsonrpc": "2.0", "method": "shutdown", "id": 3, "params": null}
