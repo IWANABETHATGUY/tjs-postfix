@@ -92,17 +92,6 @@ console.timeEnd('${result}')`,
 		}),
 	);
 
-	context.subscriptions.push(
-		commands.registerCommand("tjs-postfix.move-cursor", async (range) => {
-			try {
-				let editor = window.activeTextEditor;
-				editor.selection = new Selection(range.start, range.end);
-				editor.revealRange(range);
-			} catch (e) {
-				console.warn(e);
-			}
-		}),
-	);
 
 	const traceOutputChannel = window.createOutputChannel(
 		"Tjs language server trace",
@@ -151,12 +140,6 @@ console.timeEnd('${result}')`,
 		clientOptions,
 	);
 
-	const typescriptServerModule = context.asAbsolutePath(
-		path.join("ts-server", "out", "server.js"),
-	);
-	// The debug options for the server
-	// --inspect=6009: runs the server in Node's Inspector mode so VS Code can attach to the server for debugging
-	const debugOptions = { execArgv: ["--nolazy", "--inspect=6009"] };
 
 	// If the extension is launched in debug mode then the debug server options are used
 	// Otherwise the run options are used

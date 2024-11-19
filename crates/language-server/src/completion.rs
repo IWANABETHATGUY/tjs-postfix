@@ -1,4 +1,5 @@
 use inflector::Inflector;
+use streaming_iterator::StreamingIterator;
 use tokio::sync::MutexGuard;
 use tower_lsp::lsp_types::*;
 use tree_sitter::{Language, Node, Parser, Query, QueryCursor, Tree};
@@ -15,7 +16,7 @@ pub fn get_react_completion(
     let mut result = vec![];
     // let mut identifier_list = vec![];
     let function_call = if let Some(node) = get_react_import_node(
-        parser.language().unwrap(),
+        &parser.language().unwrap(),
         source.as_bytes(),
         tree.root_node(),
     ) {
@@ -48,18 +49,17 @@ pub fn get_react_completion(
 }
 
 fn get_react_import_node<'a>(
-    lang: Language,
+    lang: &Language,
     source: &[u8],
     root: Node<'a>, // identifier_node_list: &'b mut Vec<Node<'a>>,
 ) -> Option<Node<'a>> {
-    let jsx_expression_query = Query::new(lang, &REACT_NAME_SPACE_IMPORT).unwrap();
+    let jsx_expression_query = Query::new(&lang, &REACT_NAME_SPACE_IMPORT).unwrap();
 
     let mut cursor = QueryCursor::new();
 
-    let jsx_expression_matches = cursor.matches(&jsx_expression_query, root, source);
-    for item in jsx_expression_matches {
+    let mut jsx_expression_matches = cursor.matches(&jsx_expression_query, root, source);
+    while let Some(item) = jsx_expression_matches.next() {
         for cap in item.captures {
-            // debug!("matches {:?}", cap.node.utf8_text(source).unwrap());
             return Some(cap.node);
         }
     }

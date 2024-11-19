@@ -3,23 +3,7 @@ use std::time::Instant;
 use lsp_text_document::lsp_types::Position;
 use tree_sitter::{Language, Node, Parser, Point};
 // use cssparser::{Parser as CssParser, ParserInput, Token};
-fn main() {
-    let source_code = include_str!("../assets/nest.scss");
-    let start = Instant::now();
-    let mut parser = Parser::new();
-    let language = tree_sitter_scss::language();
-    parser.set_language(language).unwrap();
-    let tree = parser.parse(source_code, None).unwrap();
-    println!("{:?}", start.elapsed());
-    let mut position_list = vec![];
-    let root_node = tree.root_node();
-    println!("{:?}", root_node.has_error());
-    let start = Instant::now();
-    traverse(root_node, &mut vec![], source_code, &mut position_list);
-    println!("{:?}", start.elapsed());
-    println!("{:?}", position_list);
-    // let parser = CssParser::new(&mut ParserInput::new(source_code));
-}
+fn main() {}
 fn traverse(
     root: Node,
     trace_stack: &mut Vec<Vec<String>>,
@@ -126,4 +110,3 @@ fn pretty_print(source_code: &str, root: Node, level: usize) {
         pretty_print(source_code, node, level + 1);
     }
 }
-

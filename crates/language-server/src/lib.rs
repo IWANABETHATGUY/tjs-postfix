@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
@@ -12,8 +11,6 @@ use jsonrpc::Result;
 use log::debug;
 use lsp_text_document::FullTextDocument;
 use memmap2::Mmap;
-use notification::{AstPreviewRequestParams, CustomNotification, CustomNotificationParams};
-use notify::Event;
 use serde_json::Value;
 use tower_lsp::{jsonrpc, lsp_types::*, LanguageServer};
 mod backend;
@@ -25,17 +22,11 @@ mod notification;
 mod query_pattern;
 mod scss_traverse;
 pub use backend::Backend;
-use document_symbol::get_component_symbol;
 use tree_sitter::{Parser, Point};
-
-pub enum Job {
-    Event(Event),
-    Shutdown,
-}
 
 use crate::helper::generate_lsp_range;
 use crate::scss_traverse::traverse_scss_file;
-use code_action::{extract_component_action, get_function_call_action};
+use code_action::get_function_call_action;
 use completion::get_react_completion;
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
@@ -91,53 +82,20 @@ impl LanguageServer for Backend {
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
-        self.job_sender.send(Job::Shutdown).unwrap();
         Ok(())
     }
 
-    // async fn request_else(
-    //     &self,
-    //     method: &str,
-    //     _params: Option<serde_json::Value>,
-    // ) -> jsonrpc::Result<Option<serde_json::Value>> {
-    //     if method == "tjs-postfix/ast-preview" {
-    //         if let Some(params) = _params {
-    //             let param = serde_json::from_value::<AstPreviewRequestParams>(params).unwrap();
-    //             let path_ast_tuple =
-    //                 if let Some(tree) = self.parse_tree_map.lock().await.get(&param.path) {
-    //                     Some((param.path, format!("{}", TreeWrapper(tree.clone(),))))
-    //                 } else {
-    //                     None
-    //                 };
-    //             if let Some((path, ast_string)) = path_ast_tuple {
-    //                 self.client
-    //                     .send_custom_notification::<CustomNotification>(
-    //                         CustomNotificationParams::new(path, ast_string),
-    //                     )
-    //                     .await;
-    //             }
-    //         }
-    //     }
-    //     Ok(None)
-    // }
-
     async fn did_change_workspace_folders(&self, _: DidChangeWorkspaceFoldersParams) {
-        self.client
-            .log_message(MessageType::INFO, "workspace folders changed!")
-            .await;
+        debug!("workspace folders changed!");
     }
 
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
         self.reset_templates().await;
-        self.client
-            .log_message(MessageType::INFO, "configuration changed!")
-            .await;
+        debug!("configuration changed!");
     }
 
     async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
-        self.client
-            .log_message(MessageType::INFO, "watched files have changed!")
-            .await;
+        debug!("watched files have changed!");
     }
     async fn goto_definition(
         &self,
@@ -258,17 +216,6 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
-    // async fn document_symbol(
-    //     &self,
-    //     params: DocumentSymbolParams,
-    // ) -> Result<Option<DocumentSymbolResponse>> {
-    async fn document_symbol(
-        &self,
-        params: DocumentSymbolParams,
-    ) -> jsonrpc::Result<Option<DocumentSymbolResponse>> {
-        get_component_symbol(&self, params).await
-    }
-
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let mut code_action_result = CodeActionResponse::new();
         code_action_result.extend(
@@ -276,14 +223,11 @@ impl LanguageServer for Backend {
                 .await
                 .unwrap_or_default(),
         );
-        extract_component_action(&self, params, &mut code_action_result).await?;
         Ok(Some(code_action_result))
     }
 
     async fn execute_command(&self, _params: ExecuteCommandParams) -> Result<Option<Value>> {
-        self.client
-            .log_message(MessageType::INFO, "command executed!")
-            .await;
+        debug!("command executed!");
 
         Ok(None)
     }
@@ -524,72 +468,5 @@ impl LanguageServer for Backend {
             }
         }
         Ok(None)
-    }
-}
-
-pub fn get_word_range_of_string(string: &str) -> Vec<std::ops::Range<usize>> {
-    let mut index = -1;
-    let mut iter = string.bytes().enumerate();
-    let mut range = vec![];
-    let mut in_word = false;
-    while let Some((i, c)) = iter.next() {
-        if c.is_ascii_whitespace() && index != -1 {
-            in_word = false;
-            range.push(index as usize..i);
-            index = -1;
-        } else if !c.is_ascii_whitespace() && index == -1 {
-            in_word = true;
-            index = i as i32;
-        }
-    }
-
-    if in_word {
-        range.push(index as usize..string.len())
-    }
-    range
-}
-
-pub fn insert_position_list(
-    path: &str,
-    parser: &mut Parser,
-    scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
-) {
-    if path.ends_with(".scss") || path.ends_with(".css") || path.ends_with(".less") {
-        let read_time = Instant::now();
-        match mmap_file_read(path) {
-            Ok(file) => {
-                log::debug!("read_file {:?}", read_time.elapsed());
-                let mut start = Instant::now();
-                let tree = parser.parse(&file, None).unwrap();
-                log::debug!("parse time {:?}", start.elapsed());
-                start = Instant::now();
-                let mut position_list = vec![];
-                let root_node = tree.root_node();
-                traverse_scss_file(root_node, &mut vec![], &file, &mut position_list);
-                log::debug!("traverse scss file {:?}", start.elapsed());
-                scss_class_map.insert(path.to_string(), position_list);
-            }
-            Err(_) => {}
-        }
-    }
-}
-
-fn mmap_file_read(path: &str) -> std::io::Result<Vec<u8>> {
-    let file = File::open(path)?;
-
-    let mmap = unsafe { Mmap::map(&file).expect("failed to map the file") };
-    let mut reader = Box::new(&mmap[..]);
-    let mut buf = Vec::with_capacity(mmap.len());
-    let mut buf_reader = std::io::BufReader::new(reader.as_mut());
-    buf_reader.read_to_end(&mut buf)?;
-    Ok(buf)
-    // reader.concat()
-}
-pub fn remove_position_list(
-    path: &str,
-    scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
-) {
-    if path.ends_with(".scss") || path.ends_with(".css") || path.ends_with(".less") {
-        scss_class_map.remove(path);
     }
 }

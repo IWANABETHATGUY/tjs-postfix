@@ -10,8 +10,6 @@ use tower_lsp::{lsp_types::*, Client};
 use tree_sitter::Point;
 use tree_sitter::{Node, Parser, Tree};
 
-use crate::Job;
-
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PostfixTemplate {
@@ -31,8 +29,6 @@ pub struct Backend {
     pub(crate) parse_tree_map: Mutex<HashMap<String, Tree>>,
     postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
     pub workspace_folder: Mutex<Vec<WorkspaceFolder>>,
-    // pub scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
-    pub job_sender: Sender<Job>,
 }
 impl Backend {
     pub fn new(
@@ -41,8 +37,6 @@ impl Backend {
         parser: Mutex<Parser>,
         postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
         parse_tree_map: Mutex<HashMap<String, Tree>>,
-        // scss_class_map: Arc<DashMap<String, Vec<(String, Point)>>>,
-        job_sender: Sender<Job>,
     ) -> Self {
         Self {
             client,
@@ -51,8 +45,6 @@ impl Backend {
             postfix_template_list,
             parse_tree_map,
             workspace_folder: Mutex::new(vec![]),
-            // scss_class_map, // w    pub workspace_folders: Option<Vec<WorkspaceFolder>>,
-            job_sender,
         }
     }
 

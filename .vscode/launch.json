@@ -28,7 +28,7 @@
         "script": "watch"
       },
       "env": {
-        "SERVER_PATH": "${workspaceRoot}/server/target/debug/tjs-language-server"
+        "SERVER_PATH": "${workspaceRoot}/target/debug/tjs-language-server"
       }
     },
     // {
