@@ -1,5 +1,3 @@
-use crossbeam_channel::Sender;
-use dashmap::DashMap;
 use lsp_text_document::FullTextDocument;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -7,7 +5,6 @@ use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex;
 use tower_lsp::{lsp_types::*, Client};
-use tree_sitter::Point;
 use tree_sitter::{Node, Parser, Tree};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -22,6 +19,7 @@ pub struct SnippetCompletionItem {
     detail: String,
     replace_string_generator: Box<dyn Fn(String) -> String>,
 }
+
 pub struct Backend {
     pub(crate) client: Client,
     pub(crate) document_map: Mutex<HashMap<String, FullTextDocument>>,
@@ -85,8 +83,13 @@ impl Backend {
                         template_item.code.clone(),
                     );
                     item.kind = Some(CompletionItemKind::SNIPPET);
+                    item.insert_text_format = Some(InsertTextFormat::SNIPPET);
                     let replace_string = template_item.code.replace("$$", source_code);
                     item.documentation = Some(Documentation::String(replace_string.clone()));
+                    // item.text_edit = Some(CompletionTextEdit::Edit(TextEdit::new(
+                    //     replace_range.clone(),
+                    //     replace_string.clone(),
+                    // )));
                     item.insert_text = Some(replace_string);
                     item.additional_text_edits =
                         Some(vec![TextEdit::new(replace_range.clone(), "".into())]);

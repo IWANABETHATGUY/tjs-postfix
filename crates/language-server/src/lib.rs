@@ -1,16 +1,10 @@
-use std::fs::File;
-use std::io::Read;
-use std::sync::Arc;
 use std::time::Instant;
 
 pub use backend::TreeWrapper;
-use dashmap::DashMap;
 use helper::get_tree_sitter_edit_from_change;
-// use helper::get_tree_sitter_edit_from_change;
 use jsonrpc::Result;
 use log::debug;
 use lsp_text_document::FullTextDocument;
-use memmap2::Mmap;
 use serde_json::Value;
 use tower_lsp::{jsonrpc, lsp_types::*, LanguageServer};
 mod backend;
@@ -20,12 +14,10 @@ mod document_symbol;
 mod helper;
 mod notification;
 mod query_pattern;
-mod scss_traverse;
 pub use backend::Backend;
 use tree_sitter::{Parser, Point};
 
 use crate::helper::generate_lsp_range;
-use crate::scss_traverse::traverse_scss_file;
 use code_action::get_function_call_action;
 use completion::get_react_completion;
 #[tower_lsp::async_trait]
@@ -56,7 +48,6 @@ impl LanguageServer for Backend {
 
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
 
-                document_symbol_provider: Some(OneOf::Left(true)),
                 workspace: Some(WorkspaceServerCapabilities {
                     workspace_folders: Some(WorkspaceFoldersServerCapabilities {
                         supported: Some(true),
@@ -64,11 +55,6 @@ impl LanguageServer for Backend {
                     }),
                     file_operations: None,
                 }),
-                definition_provider: Some(OneOf::Right(DefinitionOptions {
-                    work_done_progress_options: WorkDoneProgressOptions {
-                        work_done_progress: Some(true),
-                    },
-                })),
                 ..ServerCapabilities::default()
             },
         })
@@ -76,9 +62,7 @@ impl LanguageServer for Backend {
 
     async fn initialized(&self, _: InitializedParams) {
         self.reset_templates().await;
-        self.client
-            .log_message(MessageType::INFO, "initialized!")
-            .await;
+        debug!("initialized!");
     }
 
     async fn shutdown(&self) -> jsonrpc::Result<()> {
@@ -96,124 +80,6 @@ impl LanguageServer for Backend {
 
     async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
         debug!("watched files have changed!");
-    }
-    async fn goto_definition(
-        &self,
-        params: GotoDefinitionParams,
-    ) -> jsonrpc::Result<Option<GotoDefinitionResponse>> {
-        if let Some(document) = self.document_map.lock().await.get(
-            &params
-                .text_document_position_params
-                .text_document
-                .uri
-                .to_string(),
-        ) {
-            let pos = params.text_document_position_params.position;
-            // debug!("before_string:{:?}", before_string);
-            let map = self.parse_tree_map.lock().await;
-            let tree = map.get(
-                &params
-                    .text_document_position_params
-                    .text_document
-                    .uri
-                    .to_string(),
-            );
-            if let Some(tree) = tree {
-                let root = tree.root_node();
-                // this is based bytes index
-                let char_index =
-                    document.rope.line_to_char(pos.line as usize) + pos.character as usize;
-                let click_byte = document.rope.char_to_byte(char_index);
-                let node = root.named_descendant_for_byte_range(click_byte, click_byte);
-                if let Some(click_node) = node {
-                    // log::debug!("jump definition {:?}", click_node.kind());
-                    // get latest jsx_attribute
-                    if !matches!(click_node.kind(), "string_fragment" | "template_string") {
-                        return Ok(None);
-                    }
-                    let attribute = {
-                        let mut cur = click_node;
-                        loop {
-                            if cur.kind() == "jsx_attribute" {
-                                break;
-                            } else if cur.parent().is_none()
-                                || matches!(
-                                    cur.parent().unwrap().kind(),
-                                    "ERROR" | "jsx_element" | "jsx_self_closing_element"
-                                )
-                            {
-                                return Ok(None);
-                            } else {
-                                cur = cur.parent().unwrap();
-                            }
-                        }
-                        cur
-                    };
-
-                    // match attribute.child(0) {
-                    //     Some(prop) if prop.kind() == "property_identifier" => {
-                    //         let document_content = document.rope.to_string();
-                    //         if !matches!(
-                    //             &document_content[prop.byte_range()],
-                    //             "className" | "class"
-                    //         ) {
-                    //             log::error!("is not className");
-                    //             return Ok(None);
-                    //         }
-                    //         let click_range = if click_node.kind() == "string_fragment" {
-                    //             click_node.byte_range()
-                    //         } else {
-                    //             let range = click_node.byte_range();
-                    //             range.start + 1..range.end - 1
-                    //         };
-                    //         let click_range_start = click_range.start;
-                    //         let slice = &document_content[click_range];
-                    //
-                    //         let word_range = get_word_range_of_string(slice);
-                    //
-                    //         let range_index = word_range
-                    //             .iter()
-                    //             .find(|r| r.contains(&(click_byte - click_range_start)));
-                    //         if let Some(class_name) = range_index.map(|range| &slice[range.clone()])
-                    //         {
-                    //             let mut locations = vec![];
-                    //             for entry in self.scss_class_map.iter() {
-                    //                 let path = entry.key();
-                    //                 let point_list = entry.value();
-                    //                 for (name, position) in point_list {
-                    //                     if name == class_name {
-                    //                         locations.push(Location::new(
-                    //                             Url::parse(&format!("file://{}", path)).unwrap(),
-                    //                             Range::new(
-                    //                                 Position::new(
-                    //                                     position.row as u32,
-                    //                                     position.column as u32,
-                    //                                 ),
-                    //                                 Position::new(
-                    //                                     position.row as u32,
-                    //                                     position.column as u32,
-                    //                                 ),
-                    //                             ),
-                    //                         ));
-                    //                     }
-                    //                 }
-                    //             }
-                    //             return Ok(Some(GotoDefinitionResponse::Array(locations)));
-                    //         } else {
-                    //             return Ok(None);
-                    //         }
-                    //     }
-                    //     _ => (),
-                    // }
-
-                    // self.client
-                    //     .log_message(MessageType::INFO, node.kind())
-                    //     .await;
-                }
-            };
-        }
-
-        Ok(None)
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
@@ -328,6 +194,7 @@ impl LanguageServer for Backend {
                 .get(&params.text_document_position.text_document.uri.to_string())
             {
                 let pos = params.text_document_position.position.clone();
+                dbg!(&pos);
                 let line = document.rope.line(pos.line as usize);
 
                 let line_text_before_cursor = line.slice(..pos.character as usize).to_string();
@@ -342,7 +209,6 @@ impl LanguageServer for Backend {
                 match tree {
                     Some(tree) if before_string.is_some() => {
                         let completion_keyword = before_string.unwrap();
-                        let start = Instant::now();
                         let root = tree.root_node();
                         let dot = params.text_document_position.position;
                         let before_dot = Position::new(
@@ -394,10 +260,6 @@ impl LanguageServer for Backend {
                                 &replace_range,
                             ));
                             template_item_list.extend(res);
-                            template_item_list.push(CompletionItem::new_simple(
-                                format!("{:?}", start.elapsed()),
-                                format!("{:?}: {:?}", node, Range::default()),
-                            ));
                             return Ok(Some(CompletionResponse::Array(template_item_list)));
                         }
                     }

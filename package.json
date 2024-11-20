@@ -14,7 +14,7 @@
     "postfix"
   ],
   "engines": {
-    "vscode": "^1.44.0"
+    "vscode": "^1.85.0"
   },
   "activationEvents": [
     "onLanguage:typescript",
@@ -97,8 +97,8 @@
     "typescript": "^4.4.3",
     "vscode-test": "^1.4.0",
     "vscode-uri": "^3.0.2",
-    "webpack": "^4.43.0",
-    "webpack-cli": "^3.3.12"
+    "webpack": "^5.96.1",
+    "webpack-cli": "^5.1.4"
   },
   "packageManager": "pnpm@8.15.7+sha512.c85cd21b6da10332156b1ca2aa79c0a61ee7ad2eb0453b88ab299289e9e8ca93e6091232b25c07cbf61f6df77128d9c849e5c9ac6e44854dbd211c49f3a67adc"
 }

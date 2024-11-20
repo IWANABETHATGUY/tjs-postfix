@@ -23,7 +23,6 @@ import {
 	ServerOptions,
 	TransportKind,
 } from "vscode-languageclient/node";
-import { codeActionProvider, ExtractComponentData } from "./codeActionProvider";
 
 let client: LanguageClient;
 // type a = Parameters<>;
@@ -191,28 +190,10 @@ console.timeEnd('${result}')`,
 		}),
 	);
 
-	client.clientOptions.middleware.provideCodeActions = async (
-		doc,
-		range,
-		context,
-		token,
-	) => {
-		// return codeActionProvider({ tjsc: client, tsc: tsClient }, doc, range, context, token);
-		return codeActionProvider({ tjsc: client }, doc, range, context, token);
-	};
+	
 	// Create the language client and start the client.
 	// Start the client. This will also launch the server
-	client
-		.onReady()
-		.then(() => {
-			client.onNotification("tjs-postfix/notification", (...args) => {
-				console.log(...args);
-				if (args[0] && currentPanel) {
-					const { message: astString, title: path } = args[0];
-					currentPanel.webview.html = getWebContent(path, astString);
-				}
-			});
-		});
+	
 
 	client.start();
 	// tsClient.start();
