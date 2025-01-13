@@ -10,8 +10,7 @@ use lsp_text_document::lsp_types::{
 };
 use serde::{Deserialize, Serialize};
 use streaming_iterator::StreamingIterator;
-use tower_lsp::jsonrpc;
-use tree_sitter::{Language, Node, Point, Query, QueryCursor, TextProvider};
+use tree_sitter::{Language, Node, Point, Query, QueryCursor};
 
 use crate::{helper::generate_lsp_range, query_pattern::FUNCTION_LIKE_DECLARATION, Backend};
 #[derive(Serialize, Deserialize)]
@@ -44,14 +43,9 @@ pub async fn get_function_call_action(
     let range = params.range;
     let start = range.start;
     let end = range.end;
+    // default benchmark label code action
+    //
 
-    // debug!("range_string, {:?}", document.rope.get_slice(star..end_char));
-    // let start_char =
-    //     document.rope.try_line_to_char(start.line as usize).ok()? + start.character as usize;
-    // let end_char = document.rope.try_line_to_byte(end.line as usize).ok()? + end.character as usize;
-    // let start_byte = document.rope.try_char_to_byte(start_char).ok()?;
-    // let end_byte = document.rope.try_char_to_byte(end_char).ok()?;
-    // debug!("text: {}", &document.get_text()[start_byte..end_byte]);
     let start_node = root.named_descendant_for_point_range(
         Point::new(start.line as usize, start.character as usize),
         Point::new(start.line as usize, start.character as usize + 1),
@@ -63,7 +57,7 @@ pub async fn get_function_call_action(
     let sp = start_node.parent()?;
     let ep = end_node.parent()?;
     if sp.kind() != "member_expression" || ep.kind() != "member_expression" {
-        return None;
+        return Some(ret);
     }
 
     let start_object_node = sp.child_by_field_name("object");

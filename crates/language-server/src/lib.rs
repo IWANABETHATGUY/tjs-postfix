@@ -10,7 +10,6 @@ use tower_lsp::{jsonrpc, lsp_types::*, LanguageServer};
 mod backend;
 mod code_action;
 mod completion;
-mod document_symbol;
 mod helper;
 mod notification;
 mod query_pattern;
@@ -57,6 +56,7 @@ impl LanguageServer for Backend {
                 }),
                 ..ServerCapabilities::default()
             },
+            offset_encoding: Some("utf-16".to_string()),
         })
     }
 

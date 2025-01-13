@@ -1,4 +1,4 @@
-use inflector::Inflector;
+use heck::ToPascalCase;
 use streaming_iterator::StreamingIterator;
 use tokio::sync::MutexGuard;
 use tower_lsp::lsp_types::*;
