@@ -43,7 +43,7 @@ pub fn get_react_completion(
     item.documentation = Some(Documentation::String(replace_string.clone()));
     item.insert_text = Some(replace_string);
     item.insert_text_format = Some(InsertTextFormat::SNIPPET);
-    item.additional_text_edits = Some(vec![TextEdit::new(replace_range.clone(), "".into())]);
+    item.additional_text_edits = Some(vec![TextEdit::new(*replace_range, "".into())]);
     result.push(item);
     result
 }
@@ -53,13 +53,13 @@ fn get_react_import_node<'a>(
     source: &[u8],
     root: Node<'a>, // identifier_node_list: &'b mut Vec<Node<'a>>,
 ) -> Option<Node<'a>> {
-    let jsx_expression_query = Query::new(&lang, &REACT_NAME_SPACE_IMPORT).unwrap();
+    let jsx_expression_query = Query::new(lang, REACT_NAME_SPACE_IMPORT).unwrap();
 
     let mut cursor = QueryCursor::new();
 
     let mut jsx_expression_matches = cursor.matches(&jsx_expression_query, root, source);
     while let Some(item) = jsx_expression_matches.next() {
-        for cap in item.captures {
+        if let Some(cap) = item.captures.iter().next() {
             return Some(cap.node);
         }
     }

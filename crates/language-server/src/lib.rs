@@ -14,15 +14,14 @@ mod helper;
 mod notification;
 mod query_pattern;
 pub use backend::Backend;
-use tree_sitter::{Parser, Point};
+use tree_sitter::Point;
 
 use crate::helper::generate_lsp_range;
-use code_action::get_function_call_action;
+use code_action::{get_function_call_action, get_insert_bench_action};
 use completion::get_react_completion;
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, params: InitializeParams) -> jsonrpc::Result<InitializeResult> {
-        // *self.workspace_folder.lock().await = params.workspace_folders.unwrap_or(vec![]);
+    async fn initialize(&self, _params: InitializeParams) -> jsonrpc::Result<InitializeResult> {
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
@@ -85,7 +84,12 @@ impl LanguageServer for Backend {
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
         let mut code_action_result = CodeActionResponse::new();
         code_action_result.extend(
-            get_function_call_action(&self, params.clone())
+            get_insert_bench_action(self, params.clone())
+                .await
+                .unwrap_or_default(),
+        );
+        code_action_result.extend(
+            get_function_call_action(self, params.clone())
                 .await
                 .unwrap_or_default(),
         );
@@ -131,15 +135,15 @@ impl LanguageServer for Backend {
                 .map(|change| {
                     let range = change.range.map(|range| {
                         generate_lsp_range(
-                            range.start.line as u32,
-                            range.start.character as u32,
-                            range.end.line as u32,
-                            range.end.character as u32,
+                            range.start.line,
+                            range.start.character,
+                            range.end.line,
+                            range.end.character,
                         )
                     });
                     TextDocumentContentChangeEvent {
                         range,
-                        range_length: change.range_length.and_then(|v| Some(v as u32)),
+                        range_length: change.range_length,
                         text: change.text,
                     }
                 })
@@ -186,21 +190,21 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        if let Some(_) = params.context {
+        if params.context.is_some() {
             if let Some(document) = self
                 .document_map
                 .lock()
                 .await
                 .get(&params.text_document_position.text_document.uri.to_string())
             {
-                let pos = params.text_document_position.position.clone();
+                let pos = params.text_document_position.position;
                 dbg!(&pos);
                 let line = document.rope.line(pos.line as usize);
 
                 let line_text_before_cursor = line.slice(..pos.character as usize).to_string();
                 let before_string = line_text_before_cursor
                     .rfind(".")
-                    .and_then(|n| Some(&line_text_before_cursor[n + 1..]));
+                    .map(|n| &line_text_before_cursor[n + 1..]);
                 // debug!("before_string:{:?}", before_string);
                 let parser = self.parser.lock().await;
                 let map = self.parse_tree_map.lock().await;

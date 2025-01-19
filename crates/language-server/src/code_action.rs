@@ -4,12 +4,16 @@ use std::{
 };
 
 use log::debug;
-use lsp_text_document::lsp_types::{
-    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionResponse, Range,
-    TextEdit, WorkspaceEdit,
+use lsp_text_document::{
+    lsp_types::{
+        CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionResponse,
+        Range, TextEdit, WorkspaceEdit,
+    },
+    FullTextDocument,
 };
 use serde::{Deserialize, Serialize};
 use streaming_iterator::StreamingIterator;
+use tower_lsp::lsp_types::Position;
 use tree_sitter::{Language, Node, Point, Query, QueryCursor};
 
 use crate::{helper::generate_lsp_range, query_pattern::FUNCTION_LIKE_DECLARATION, Backend};
@@ -28,6 +32,56 @@ pub struct ExtractComponentData {
     identifier_node_list: Vec<IdentifierNode>,
     function_name: String,
 }
+
+fn slice_text<'a>(range: &'a Range, document: &'a FullTextDocument) -> Option<&'a str> {
+    let start = range.start;
+    let end = range.end;
+    let start_byte = document
+        .rope
+        .try_char_to_byte(
+            document.rope.try_line_to_char(start.line as usize).ok()? + start.character as usize,
+        )
+        .ok()?;
+    let end_byte = document
+        .rope
+        .try_char_to_byte(
+            document.rope.try_line_to_char(end.line as usize).ok()? + end.character as usize,
+        )
+        .ok()?;
+    let range_content = document.text.get(start_byte..end_byte)?;
+    Some(range_content)
+}
+
+pub async fn get_insert_bench_action(
+    back_end: &Backend,
+    params: CodeActionParams,
+) -> Option<CodeActionResponse> {
+    let mut ret = CodeActionResponse::new();
+    let document_map = back_end.document_map.lock().await;
+    let document = document_map.get(&params.text_document.uri.to_string())?;
+
+    let range = params.range;
+    if let Some(range_content) = slice_text(&range, document) {
+        let replaced_code =
+            format!("console.time('_label');\n{range_content}\nconsole.timeEnd('_label')",);
+
+        let edit = TextEdit::new(range, replaced_code);
+        let mut changes = HashMap::new();
+        changes.insert(params.text_document.uri.clone(), vec![edit]);
+        ret.push(CodeActionOrCommand::CodeAction(CodeAction {
+            title: "Insert benchmark label".to_string(),
+            kind: Some(CodeActionKind::REFACTOR_EXTRACT),
+            diagnostics: None,
+            edit: Some(WorkspaceEdit::new(changes)),
+            command: None,
+            is_preferred: Some(false),
+            disabled: None,
+            data: None,
+        }));
+    };
+
+    Some(ret)
+}
 pub async fn get_function_call_action(
     back_end: &Backend,
     params: CodeActionParams,
@@ -43,8 +97,6 @@ pub async fn get_function_call_action(
     let range = params.range;
     let start = range.start;
     let end = range.end;
-    // default benchmark label code action
-    //
 
     let start_node = root.named_descendant_for_point_range(
         Point::new(start.line as usize, start.character as usize),
@@ -100,7 +152,7 @@ pub async fn get_function_call_action(
 const IDENTIFIER_QUERY_PATTERN: &str = r#"(identifier) @a"#;
 const JSX_EXPRESSION_QUERY_PATTERN: &str = r#"(jsx_expression) @a"#;
 
-fn get_function_name_from_program<'b>(lang: Language, source: &[u8], root: Node<'b>) -> String {
+fn get_function_name_from_program(lang: Language, source: &[u8], root: Node<'_>) -> String {
     let jsx_query = Query::new(&lang, FUNCTION_LIKE_DECLARATION).unwrap();
 
     let mut cursor = QueryCursor::new();

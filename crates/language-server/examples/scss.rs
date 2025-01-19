@@ -1,7 +1,5 @@
-use std::time::Instant;
 
-use lsp_text_document::lsp_types::Position;
-use tree_sitter::{Language, Node, Parser, Point};
+use tree_sitter::{Node, Point};
 // use cssparser::{Parser as CssParser, ParserInput, Token};
 fn main() {}
 fn traverse(

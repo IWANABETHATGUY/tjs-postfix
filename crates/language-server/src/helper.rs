@@ -51,6 +51,7 @@ pub fn get_tree_sitter_edit_from_change(
     })
 }
 
+#[allow(unused)]
 pub fn pretty_print(source_code: &str, root: Node, level: usize) {
     if !root.is_named() {
         return;

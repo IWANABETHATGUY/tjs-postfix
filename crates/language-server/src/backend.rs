@@ -58,12 +58,9 @@ impl Backend {
             if let Ok(configuration) = serde_json::from_value::<Vec<PostfixTemplate>>(
                 configuration.first_mut().unwrap().take(),
             ) {
-                match self.postfix_template_list.lock() {
-                    Ok(mut list) => {
-                        list.clear();
-                        list.extend(configuration);
-                    }
-                    Err(_) => {}
+                if let Ok(mut list) = self.postfix_template_list.lock() {
+                    list.clear();
+                    list.extend(configuration);
                 }
             }
         }
@@ -87,12 +84,12 @@ impl Backend {
                     let replace_string = template_item.code.replace("$$", source_code);
                     item.documentation = Some(Documentation::String(replace_string.clone()));
                     item.text_edit = Some(CompletionTextEdit::Edit(TextEdit::new(
-                        replace_range.clone(),
+                        *replace_range,
                         replace_string.clone(),
                     )));
                     item.insert_text = Some(replace_string);
                     item.additional_text_edits =
-                        Some(vec![TextEdit::new(replace_range.clone(), "".into())]);
+                        Some(vec![TextEdit::new(*replace_range, "".into())]);
                     item
                 })
                 .collect()
@@ -224,7 +221,7 @@ impl Backend {
 
                 item.insert_text = Some(replace_string);
                 item.additional_text_edits =
-                    Some(vec![TextEdit::new(replace_range.clone(), "".into())]);
+                    Some(vec![TextEdit::new(*replace_range, "".into())]);
                 item
             })
             .collect()
