@@ -19,12 +19,10 @@ async fn main() {
     tsx_parser.set_language(&LANGUAGE_TSX.into()).unwrap();
 
     let (service, socket) = LspService::new(|client| {
-        let document_map = Mutex::new(HashMap::new());
         let parse_tree_map = Mutex::new(HashMap::new());
         let postfix_template_list = Arc::new(StdMutex::new(vec![]));
         Backend::new(
             client,
-            document_map,
             Mutex::new(tsx_parser),
             postfix_template_list,
             parse_tree_map,

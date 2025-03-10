@@ -4,16 +4,10 @@ use std::{
 };
 
 use log::debug;
-use lsp_text_document::{
-    lsp_types::{
-        CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionResponse,
-        Range, TextEdit, WorkspaceEdit,
-    },
-    FullTextDocument,
-};
+use ropey::Rope;
 use serde::{Deserialize, Serialize};
 use streaming_iterator::StreamingIterator;
-use tower_lsp::lsp_types::Position;
+use tower_lsp::lsp_types::*;
 use tree_sitter::{Language, Node, Point, Query, QueryCursor};
 
 use crate::{helper::generate_lsp_range, query_pattern::FUNCTION_LIKE_DECLARATION, Backend};
@@ -33,22 +27,20 @@ pub struct ExtractComponentData {
     function_name: String,
 }
 
-fn slice_text<'a>(range: &'a Range, document: &'a FullTextDocument) -> Option<&'a str> {
+fn slice_text<'a>(range: &'a Range, document: &'a Rope) -> Option<String> {
     let start = range.start;
     let end = range.end;
     let start_byte = document
-        .rope
         .try_char_to_byte(
-            document.rope.try_line_to_char(start.line as usize).ok()? + start.character as usize,
+            document.try_line_to_char(start.line as usize).ok()? + start.character as usize,
         )
         .ok()?;
     let end_byte = document
-        .rope
         .try_char_to_byte(
-            document.rope.try_line_to_char(end.line as usize).ok()? + end.character as usize,
+            document.try_line_to_char(end.line as usize).ok()? + end.character as usize,
         )
         .ok()?;
-    let range_content = document.text.get(start_byte..end_byte)?;
+    let range_content = document.slice(start_byte..end_byte).to_string();
     Some(range_content)
 }
 
@@ -57,13 +49,14 @@ pub async fn get_insert_bench_action(
     params: CodeActionParams,
 ) -> Option<CodeActionResponse> {
     let mut ret = CodeActionResponse::new();
-    let document_map = back_end.document_map.lock().await;
+    let document_map = &back_end.document_map;
     let document = document_map.get(&params.text_document.uri.to_string())?;
 
     let range = params.range;
-    if let Some(range_content) = slice_text(&range, document) {
+    if let Some(range_content) = slice_text(&range, &document) {
         let replaced_code =
             format!("console.time('_label');\n{range_content}\nconsole.timeEnd('_label')",);
+        debug!("replaced_code: {}", replaced_code);
 
         let edit = TextEdit::new(range, replaced_code);
         let mut changes = HashMap::new();
@@ -87,7 +80,7 @@ pub async fn get_function_call_action(
     params: CodeActionParams,
 ) -> Option<CodeActionResponse> {
     let mut ret = CodeActionResponse::new();
-    let document_map = back_end.document_map.lock().await;
+    let document_map = &back_end.document_map;
     let document = document_map.get(&params.text_document.uri.to_string())?;
 
     let map = back_end.parse_tree_map.lock().await;
@@ -122,7 +115,7 @@ pub async fn get_function_call_action(
             ep.end_position().column as u32,
         );
         // debug!("sp_parent: {}, ep_parent: {}", sp.kind(), ep.kind());
-        let document_source = document.rope.to_string();
+        let document_source = document.to_string();
         let object_source_code = &document_source[start.byte_range()];
 
         let function = &document_source[start_node.start_byte()..end_node.end_byte()];

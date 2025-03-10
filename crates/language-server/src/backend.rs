@@ -1,4 +1,5 @@
-use lsp_text_document::FullTextDocument;
+use dashmap::DashMap;
+use ropey::Rope;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -22,7 +23,7 @@ pub struct SnippetCompletionItem {
 
 pub struct Backend {
     pub(crate) client: Client,
-    pub(crate) document_map: Mutex<HashMap<String, FullTextDocument>>,
+    pub(crate) document_map: DashMap<String, Rope>,
     pub(crate) parser: Mutex<Parser>,
     pub(crate) parse_tree_map: Mutex<HashMap<String, Tree>>,
     postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
@@ -31,14 +32,13 @@ pub struct Backend {
 impl Backend {
     pub fn new(
         client: Client,
-        document_map: Mutex<HashMap<String, FullTextDocument>>,
         parser: Mutex<Parser>,
         postfix_template_list: Arc<StdMutex<Vec<PostfixTemplate>>>,
         parse_tree_map: Mutex<HashMap<String, Tree>>,
     ) -> Self {
         Self {
             client,
-            document_map,
+            document_map: DashMap::default(),
             parser,
             postfix_template_list,
             parse_tree_map,
@@ -220,8 +220,7 @@ impl Backend {
                 item.documentation = Some(Documentation::String(replace_string.clone()));
 
                 item.insert_text = Some(replace_string);
-                item.additional_text_edits =
-                    Some(vec![TextEdit::new(*replace_range, "".into())]);
+                item.additional_text_edits = Some(vec![TextEdit::new(*replace_range, "".into())]);
                 item
             })
             .collect()

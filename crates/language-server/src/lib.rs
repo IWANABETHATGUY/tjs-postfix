@@ -1,10 +1,7 @@
-use std::time::Instant;
-
 pub use backend::TreeWrapper;
-use helper::get_tree_sitter_edit_from_change;
 use jsonrpc::Result;
 use log::debug;
-use lsp_text_document::FullTextDocument;
+use ropey::Rope;
 use serde_json::Value;
 use tower_lsp::{jsonrpc, lsp_types::*, LanguageServer};
 mod backend;
@@ -26,7 +23,7 @@ impl LanguageServer for Backend {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::INCREMENTAL,
+                    TextDocumentSyncKind::FULL,
                 )),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
@@ -103,66 +100,24 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        let TextDocumentItem {
-            uri,
-            language_id,
-            version,
-            text,
-        } = params.text_document;
+        let TextDocumentItem { uri, text, .. } = params.text_document;
         let tree = self.parser.lock().await.parse(&text, None).unwrap();
         self.parse_tree_map
             .lock()
             .await
             .insert(uri.to_string(), tree);
-        self.document_map.lock().await.insert(
-            uri.to_string(),
-            FullTextDocument::new(uri, language_id, version as i64, text),
-        );
+        self.document_map.insert(uri.to_string(), Rope::from(text));
     }
 
-    async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        if let Some(document) = self
-            .document_map
-            .lock()
-            .await
-            .get_mut(&params.text_document.uri.to_string())
-        {
-            let mut parser = self.parser.lock().await;
-            let mut parse_tree_map = self.parse_tree_map.lock().await;
-            let changes: Vec<TextDocumentContentChangeEvent> = params
-                .content_changes
-                .into_iter()
-                .map(|change| {
-                    let range = change.range.map(|range| {
-                        generate_lsp_range(
-                            range.start.line,
-                            range.start.character,
-                            range.end.line,
-                            range.end.character,
-                        )
-                    });
-                    TextDocumentContentChangeEvent {
-                        range,
-                        range_length: change.range_length,
-                        text: change.text,
-                    }
-                })
-                .collect();
-            let version = params.text_document.version;
+    async fn did_change(&self, mut params: DidChangeTextDocumentParams) {
+        let mut parser = self.parser.lock().await;
+        let mut parse_tree_map = self.parse_tree_map.lock().await;
+        let document = std::mem::take(&mut params.content_changes[0].text);
 
-            let tree = parse_tree_map
-                .get_mut(&params.text_document.uri.to_string())
-                .unwrap();
-            let start = Instant::now();
-            for change in changes {
-                tree.edit(
-                    &get_tree_sitter_edit_from_change(&change, document, version as i64).unwrap(),
-                );
-            }
-            debug!("incremental updating: {:?}", start.elapsed());
-            let new_tree = parser.parse(document.rope.to_string(), Some(tree)).unwrap();
-            parse_tree_map.insert(params.text_document.uri.to_string(), new_tree);
-        }
+        let new_tree = parser.parse(&document, None).unwrap();
+        parse_tree_map.insert(params.text_document.uri.to_string(), new_tree);
+        self.document_map
+            .insert(params.text_document.uri.to_string(), Rope::from(document));
     }
 
     async fn did_save(&self, _params: DidSaveTextDocumentParams) {
@@ -185,21 +140,18 @@ impl LanguageServer for Backend {
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
-        let mut map = self.document_map.lock().await;
-        map.remove(&params.text_document.uri.to_string());
+        self.document_map
+            .remove(&params.text_document.uri.to_string());
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         if params.context.is_some() {
             if let Some(document) = self
                 .document_map
-                .lock()
-                .await
                 .get(&params.text_document_position.text_document.uri.to_string())
             {
                 let pos = params.text_document_position.position;
-                dbg!(&pos);
-                let line = document.rope.line(pos.line as usize);
+                let line = document.line(pos.line as usize);
 
                 let line_text_before_cursor = line.slice(..pos.character as usize).to_string();
                 let before_string = line_text_before_cursor
@@ -222,9 +174,9 @@ impl LanguageServer for Backend {
                         );
                         // this is based bytes index
                         // let byte_index_start = document.rope.line_to_byte(before_dot.line as usize);
-                        let char_index = document.rope.line_to_char(before_dot.line as usize)
+                        let char_index = document.line_to_char(before_dot.line as usize)
                             + before_dot.character as usize;
-                        let byte_index = document.rope.char_to_byte(char_index);
+                        let byte_index = document.char_to_byte(char_index);
                         let before_dot_node =
                             root.named_descendant_for_byte_range(byte_index, byte_index);
 
@@ -246,7 +198,7 @@ impl LanguageServer for Backend {
                                 dot.line,
                                 dot.character,
                             );
-                            let source = document.rope.to_string();
+                            let source = document.to_string();
 
                             let res = get_react_completion(
                                 &source[node.byte_range()],
