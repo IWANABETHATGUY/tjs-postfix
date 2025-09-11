@@ -40,7 +40,7 @@ fn slice_text<'a>(range: &'a Range, document: &'a Rope) -> Option<String> {
             document.try_line_to_char(end.line as usize).ok()? + end.character as usize,
         )
         .ok()?;
-    let range_content = document.slice(start_byte..end_byte).to_string();
+    let range_content = document.get_slice(start_byte..end_byte)?.to_string();
     Some(range_content)
 }
 
